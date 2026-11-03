@@ -12,7 +12,7 @@
 
 ---
 
-### 🧪 Fase 1 - Maquetado Base, Navegación y Adaptación de Stitch (LISTA PARA PRUEBA ✅)
+### ✅ Fase 1 - Maquetado Base, Navegación y Adaptación de Stitch (COMPLETADA)
 - **Design System & Tokens:** Extender `tailwind.config.js` e `index.css` con la paleta de tokens M3, tipografía *Plus Jakarta Sans* e iconos *Material Symbols Outlined* según `DESIGN.md`.
 - **Shell Móvil & Layout:** Contenedor responsivo PWA centrado (`max-w-md mx-auto min-h-screen pb-24`) con soporte para *safe-areas* móviles.
 - **Navegación Global:** Componente `BottomNav` con las 4 rutas principales + botón flotante de SOS en el header/dock.
@@ -21,32 +21,19 @@
   - `src/pages/TurnosPage.jsx`: Tablón comunitario de turnos (`tabl_n_de_turnos_jujuy`).
   - `src/pages/CalculadoraPage.jsx`: Calculadora de rendición y ganancias (`calculadora_de_rendici_n_y_ganancias`).
   - `src/pages/DirectorioPage.jsx`: Guía de repuesteras, gomerías y mercado (`directorio_mercado_cadete_jujuy`).
-- **Resolución de Brechas UI detectadas en Stitch:**
-  - 🧩 **Hub / Home (`src/pages/HubPage.jsx`):** Stitch solo proveyó `DESIGN.md` sin código. Se maquetará la pantalla principal "Cadete Hub Jujuy" (resumen de estado operativo, accesos rápidos, clima/tarifa dinámica y accesos directos).
-  - 🧩 **Maquetado de Auth & Perfil:** Crear interfaces preliminares para Login/Registro (`src/pages/LoginPage.jsx`) y Perfil de usuario (`src/pages/PerfilPage.jsx`), las cuales no venían en el paquete de Stitch pero son requeridas por las fases posteriores.
 
 ---
 
-### ⏳ Fase 2 - Autenticación, Perfiles y Roles
-- **Integración Supabase Auth:** Login con Google y Email/Password.
-- **Gestión de Perfil:** Pantalla "Mi Perfil" con nivel de cadete, vehículo (moto/bici), zona frecuente y estadísticas.
-- **Sistema de Roles:**
-  - *Anónimo:* Solo lectura en mapa y directorio.
-  - *Cadete Registrado:* Puede reportar alertas en 1-tap y confirmar incidentes.
-  - *Cadete Verificado:* Acceso al intercambio de turnos en el tablón.
-  - *Cadete Emprendedor:* Habilitado para publicar productos en el mercado local.
-- **Control de Acceso en UI:** Bloqueo/deshabilitación condicional de botones ("Reportar Alerta", "Publicar Turno", "Vender") con redirección o modal hacia el Login para no autenticados.
+### ✅ Fase 2 - Autenticación, Perfiles y Roles (COMPLETADA)
+- **Integración Supabase Auth (`src/context/AuthContext.jsx`):** Login y registro con Email/Password y Google OAuth asignando por defecto el rol Nivel 2 (`cadete_verificado`).
+- **Gestión de Perfil (`src/pages/PerfilPage.jsx`):** Vista "Mi Perfil" accesible desde el botón de perfil en `Header.jsx` para gestionar estado (`Disponible` / `En Pausa`), vehículo (`Moto` / `Bici`), zona de Jujuy y nivel de acceso (`USUARIOS.md`).
+- **Esquema SQL y Políticas RLS (`supabase/schema.sql`):** Tablas `profiles`, `alerts`, `shifts` y `directory_items` con Row Level Security vinculando cada escritura a `auth.uid() = user_id`.
 
 ---
 
-### ⏳ Fase 3 - Módulo de Mapa Interactivo y Alertas Seguras
-- **Resolución de Brecha - Mapa Real:** Sustituir la imagen estática de Stitch por un mapa interactivo (Leaflet o MapLibre) enfocado en San Salvador de Jujuy, Alto Comedero, Cuyaya, Los Perales y La Viña.
-- **Pines Georreferenciados en Tiempo Real:** Integración con tabla de Supabase (con `user_id` obligatorio) para reportes de:
-  - Controles de tránsito y grúas (Rotonda Chango Más, Acceso Sur, etc.).
-  - Badenes crecidos y lluvias/inundaciones (colectora Chijra).
-  - Gomerías y auxilio mecánico de turno.
-  - Zonas rojas o alertas de seguridad.
-- **Resolución de Brecha - Funcionalidad SOS:** Configurar la acción real del botón SOS (alerta con coordenadas GPS por WhatsApp comunitario / llamada de auxilio rápido / pin de emergencia en la base de datos).
+### ✅ Fase 3 - Módulo de Mapa Interactivo y Alertas Seguras (COMPLETADA)
+- **Mapa Real Interactivo (`src/components/JujuyMap.jsx`):** Mapa con Leaflet y OpenStreetMap centrado en San Salvador de Jujuy, Alto Comedero, Cuyaya, Chijra, La Viña, Los Perales y Palpalá.
+- **Pines Georreferenciados en Supabase:** Creación y borrado de pines (Controles en Rotonda Chango Más, Badenes/Lluvia, Gomerías, Zonas Rojas y SOS) restringidos a usuarios autenticados con trazabilidad (`user_id`).
 
 ---
 

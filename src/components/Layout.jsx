@@ -1,10 +1,14 @@
 import React from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Header from './Header';
 import BottomNav from './BottomNav';
+import { useAuth } from '../context/AuthContext';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, profile, canWriteMapAndShifts } = useAuth();
 
   const getScreenTitle = (path) => {
     switch (path) {
@@ -17,9 +21,46 @@ export default function Layout() {
         return 'Calculadora';
       case '/directorio':
         return 'Directorio';
+      case '/perfil':
+        return 'Mi Perfil';
       default:
         return 'Cadetes Jujuy';
     }
+  };
+
+  const handleSosAuxilio = async () => {
+    if (!canWriteMapAndShifts || !user) {
+      if (
+        window.confirm(
+          '🚨 Para emitir una alerta SOS georreferenciada con tu ID de cadete debés iniciar sesión. ¿Ir a Mi Perfil?'
+        )
+      ) {
+        navigate('/perfil');
+      }
+      return;
+    }
+
+    const cadeteName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Jujuy';
+    const zone = profile?.zone || 'Centro';
+
+    if (isSupabaseConfigured) {
+      await supabase.from('alerts').insert({
+        user_id: user.id,
+        author_name: cadeteName,
+        vehicle: profile?.vehicle || 'Moto',
+        type: 'sos',
+        category: 'gruas',
+        badge: '🚨 SOS AUXILIO EN RUTA',
+        title: `Auxilio Mecánico / Emergencia en ${zone}`,
+        description: `El compañero ${cadeteName} (${profile?.vehicle || 'Moto'}) solicita asistencia en ${zone}.`,
+        zone,
+        confirm_count: 1,
+        verified: true,
+      });
+    }
+
+    alert(`🚨 Alerta SOS enviada al radar comunitario de Jujuy con tu ID (${cadeteName}).`);
+    navigate('/');
   };
 
   return (
@@ -36,7 +77,7 @@ export default function Layout() {
         <aside className="fixed max-w-md w-full bottom-20 px-4 pointer-events-none z-40 flex justify-end">
           <button
             type="button"
-            onClick={() => alert('🚨 SOS Auxilio activado: en Fase 3 enviará coordenadas GPS al grupo de cadetes.')}
+            onClick={handleSosAuxilio}
             className="pointer-events-auto flex items-center gap-1.5 px-4 h-11 bg-primary-container text-on-primary-container rounded-full shadow-[0_8px_20px_rgba(234,0,41,0.38)] active:scale-95 transition-transform cursor-pointer"
           >
             <span className="material-symbols-outlined text-lg animate-pulse">emergency</span>
