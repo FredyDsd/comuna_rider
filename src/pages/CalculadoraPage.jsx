@@ -1,21 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+const STORAGE_KEY = 'comuna_rider_cierres_v1';
 
 export default function CalculadoraPage() {
   const [orders, setOrders] = useState(18);
   const [fuel, setFuel] = useState(4200);
   const [cash, setCash] = useState(32400);
   const [tips, setTips] = useState(5800);
+  const [isRainSurge, setIsRainSurge] = useState(false);
+  const [extraExpenses, setExtraExpenses] = useState(0);
+  const [savedClosures, setSavedClosures] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
   const [toastMessage, setToastMessage] = useState(null);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedClosures));
+    } catch {
+      // ignore storage errors
+    }
+  }, [savedClosures]);
+
   const formatMoney = (amount) => {
-    return '$' + Math.round(amount).toLocaleString('es-AR');
+    const sign = amount < 0 ? '-' : '';
+    return sign + '$' + Math.abs(Math.round(amount)).toLocaleString('es-AR');
   };
 
   const basePayPerOrder = 2044; // promedio viaje + bonificaciones en SSJ
-  const ordersSubtotal = orders * basePayPerOrder;
+  const effectivePayPerOrder = isRainSurge
+    ? Math.round(basePayPerOrder * 1.25)
+    : basePayPerOrder;
+  const ordersSubtotal = orders * effectivePayPerOrder;
+  const rainBonusAmount = isRainSurge ? orders * (effectivePayPerOrder - basePayPerOrder) : 0;
   const grossEarnings = ordersSubtotal + tips;
-  const peyaDeposit = Math.max(0, Math.round(cash * 0.82));
-  const pocketProfit = Math.max(0, grossEarnings - fuel - peyaDeposit);
+  const totalExpenses = fuel + extraExpenses;
+  const peyaDeposit = Math.max(0, Math.round(cash * 0.72));
+  // Saldo neto en efectivo en mano tras restar los gastos operativos del día
+  const netCashInHand = cash - totalExpenses;
+  // Ganancia neta total del turno (Viajes + Plus Clima + Propinas - Gastos)
+  const pocketProfit = Math.max(0, grossEarnings - totalExpenses);
 
   const peyaLimit = 50000;
   const debtPercentage = Math.min(100, Math.round((cash / peyaLimit) * 100));
@@ -25,7 +54,58 @@ export default function CalculadoraPage() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2200);
+    }, 2400);
+  };
+
+  const handleRendirEfectivo = () => {
+    if (cash === 0) {
+      showToast('Tu cupo de efectivo ya está en $0');
+      return;
+    }
+    setCash(0);
+    showToast('¡Efectivo rendido! Cupo liberado a $0');
+  };
+
+  const handleSaveClosure = () => {
+    const newEntry = {
+      id: `cierre-${Date.now()}`,
+      date: new Date().toLocaleString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      orders,
+      isRainSurge,
+      totalExpenses,
+      cash,
+      netCashInHand,
+      pocketProfit,
+    };
+    setSavedClosures((prev) => [newEntry, ...prev.slice(0, 9)]);
+    showToast('¡Cierre diario guardado en tu historial!');
+  };
+
+  const handleDeleteClosure = (id) => {
+    setSavedClosures((prev) => prev.filter((item) => item.id !== id));
+    showToast('Registro de cierre eliminado');
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = [
+      '🏍️ *Cierre de Turno — Comuna Rider Jujuy*',
+      `📦 Pedidos entregados: ${orders}${isRainSurge ? ' (🌧️ Tarifa Lluvia +25%)' : ''}`,
+      `💵 Efectivo cobrado: ${formatMoney(cash)}`,
+      `⛽ Gastos (Nafta/Otros): -${formatMoney(totalExpenses)}`,
+      `👛 *Saldo Neto en Efectivo: ${formatMoney(netCashInHand)}*`,
+      `✅ *Ganancia Neta del Turno: ${formatMoney(pocketProfit)}*`,
+    ].join('\n');
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    showToast('Reporte copiado y listo para WhatsApp');
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -98,7 +178,7 @@ export default function CalculadoraPage() {
         <div className="pt-1 pl-1">
           <button
             type="button"
-            onClick={() => showToast('Abriendo pasarela de rendición PeYa')}
+            onClick={handleRendirEfectivo}
             className="w-full h-12 bg-primary-container text-on-primary-container rounded-full font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-md active:scale-95 transition-transform"
           >
             <span className="material-symbols-outlined text-lg">payments</span>
@@ -110,10 +190,28 @@ export default function CalculadoraPage() {
       {/* 2. Controles Deslizadores Interactivos (Sliders Táctiles) */}
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-4 border border-surface-container/50">
         <div className="flex items-center justify-between pb-1">
-          <h3 className="font-label-lg text-label-lg text-on-surface tracking-tight font-extrabold">
-            Variables del Turno
-          </h3>
-          <span className="font-body-sm text-body-sm text-secondary">Ajuste táctil rápido</span>
+          <div>
+            <h3 className="font-label-lg text-label-lg text-on-surface tracking-tight font-extrabold">
+              Variables del Turno
+            </h3>
+            <span className="font-body-sm text-body-sm text-secondary">Ajuste táctil rápido</span>
+          </div>
+          {/* Toggle Plus por Clima (+25%) */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsRainSurge((prev) => !prev);
+              showToast(!isRainSurge ? '🌧️ Plus por Clima (+25%) activado' : 'Tarifa base normal activada');
+            }}
+            className={`h-9 px-3 rounded-full font-label-sm text-label-sm font-extrabold flex items-center gap-1.5 transition-all active:scale-95 shadow-xs ${
+              isRainSurge
+                ? 'bg-primary-container text-on-primary-container'
+                : 'bg-surface-container-low text-on-surface border border-surface-container-high'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">rainy</span>
+            <span>Clima +25%</span>
+          </button>
         </div>
 
         {/* Slider 1: Pedidos Realizados */}
@@ -127,7 +225,9 @@ export default function CalculadoraPage() {
                 <span className="font-label-md text-label-md text-on-surface block font-bold">
                   Pedidos Entregados
                 </span>
-                <span className="font-body-sm text-body-sm text-secondary">Base + Tarifa dinámica</span>
+                <span className="font-body-sm text-body-sm text-secondary">
+                  {isRainSurge ? 'Tarifa Lluvia (+25% activo)' : 'Base + Tarifa dinámica'}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -317,6 +417,40 @@ export default function CalculadoraPage() {
             <span>$20.000</span>
           </div>
         </div>
+
+        {/* Gastos Extra Rápidos (Parche / Bebida / Comida en turno) */}
+        <div className="flex items-center justify-between bg-surface-container-low p-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full bg-error-container text-on-error-container flex items-center justify-center">
+              <span className="material-symbols-outlined text-base">build</span>
+            </span>
+            <div>
+              <span className="font-label-md text-label-md text-on-surface block font-bold">
+                Otros Gastos (Gomería / Refrigerio)
+              </span>
+              <span className="font-body-sm text-body-sm text-secondary">Se descuentan del efectivo</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface font-label-lg flex items-center justify-center active:scale-90 font-bold"
+              onClick={() => setExtraExpenses((prev) => Math.max(0, prev - 500))}
+            >
+              -
+            </button>
+            <span className="font-label-lg text-label-lg text-error w-16 text-right font-extrabold">
+              {formatMoney(extraExpenses)}
+            </span>
+            <button
+              type="button"
+              className="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface font-label-lg flex items-center justify-center active:scale-90 font-bold"
+              onClick={() => setExtraExpenses((prev) => Math.min(20000, prev + 500))}
+            >
+              +
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 3. Tarjeta de Balance Neto Real del Día */}
@@ -327,7 +461,7 @@ export default function CalculadoraPage() {
             <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold">Balance Neto Real</h3>
           </div>
           <span className="px-2 py-0.5 rounded-full bg-surface-container-high font-label-sm text-label-sm text-secondary font-bold">
-            Turno Tarde/Noche
+            {isRainSurge ? '🌧️ Tarifa Lluvia +25%' : 'Turno Tarde/Noche'}
           </span>
         </div>
 
@@ -336,25 +470,36 @@ export default function CalculadoraPage() {
           <div className="flex items-center justify-between text-on-surface">
             <span className="flex items-center gap-1.5 font-medium">
               <span className="w-2 h-2 rounded-full bg-secondary"></span>
-              Ganancia Bruta Generada
+              Ganancia Bruta Generada ({orders} viajes + propinas)
             </span>
             <span className="font-label-lg text-label-lg text-on-surface font-bold">
               {formatMoney(grossEarnings)}
             </span>
           </div>
+          {isRainSurge && (
+            <div className="flex items-center justify-between text-tertiary">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span className="w-2 h-2 rounded-full bg-tertiary"></span>
+                (+) Plus por Clima Incluido (+25%)
+              </span>
+              <span className="font-label-md text-label-md font-bold">
+                +{formatMoney(rainBonusAmount)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-on-surface-variant">
             <span className="flex items-center gap-1.5 font-medium">
               <span className="w-2 h-2 rounded-full bg-error"></span>
-              (-) Combustible y Desgaste
+              (-) Gastos Totales (Nafta y Otros)
             </span>
             <span className="font-label-md text-label-md text-error font-bold">
-              -{formatMoney(fuel)}
+              -{formatMoney(totalExpenses)}
             </span>
           </div>
           <div className="flex items-center justify-between text-on-surface-variant">
             <span className="flex items-center gap-1.5 font-medium">
               <span className="w-2 h-2 rounded-full bg-primary-container"></span>
-              (-) Rendición Neta a PeYa
+              (-) Estimado a Rendir a PeYa
             </span>
             <span className="font-label-md text-label-md text-error font-bold">
               -{formatMoney(peyaDeposit)}
@@ -362,15 +507,32 @@ export default function CalculadoraPage() {
           </div>
         </div>
 
+        {/* Saldo Neto en Efectivo tras restar gastos */}
+        <div className="mt-2 p-3 rounded-lg bg-surface-container-low flex items-center justify-between border border-surface-container-high">
+          <div>
+            <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary block font-extrabold">
+              Saldo Neto en Efectivo (En Mano)
+            </span>
+            <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">
+              Efectivo cobrado ({formatMoney(cash)}) menos gastos (-{formatMoney(totalExpenses)})
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="font-headline-md text-headline-md text-on-surface font-extrabold">
+              {formatMoney(netCashInHand)}
+            </span>
+          </div>
+        </div>
+
         {/* Highlight Ganancia de Bolsillo Neta */}
-        <div className="mt-3 p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between shadow-xs border border-tertiary-container/20">
+        <div className="mt-2 p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between shadow-xs border border-tertiary-container/20">
           <div>
             <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary block font-extrabold">
               Tu Ganancia de Bolsillo Neta
             </span>
             <span className="font-body-sm text-body-sm text-tertiary flex items-center gap-1 font-bold">
               <span className="material-symbols-outlined text-xs">savings</span>
-              Listo para usar hoy
+              Libre tras descontar gastos
             </span>
           </div>
           <div className="text-right">
@@ -385,7 +547,7 @@ export default function CalculadoraPage() {
       <div className="grid grid-cols-2 gap-2.5 pt-1">
         <button
           type="button"
-          onClick={() => showToast('¡Cierre diario guardado!')}
+          onClick={handleSaveClosure}
           className="h-12 bg-inverse-surface text-inverse-on-surface rounded-full font-label-lg text-label-lg font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform"
         >
           <span className="material-symbols-outlined text-lg">bookmark_add</span>
@@ -393,7 +555,7 @@ export default function CalculadoraPage() {
         </button>
         <button
           type="button"
-          onClick={() => showToast('Generando reporte para WhatsApp')}
+          onClick={handleShareWhatsApp}
           className="h-12 bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-bold rounded-full flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform"
         >
           <span className="material-symbols-outlined text-lg text-tertiary">share</span>
@@ -401,10 +563,51 @@ export default function CalculadoraPage() {
         </button>
       </div>
 
+      {/* 5. Historial de Cierres Guardados */}
+      {savedClosures.length > 0 && (
+        <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-2.5 border border-surface-container/50">
+          <div className="flex items-center justify-between">
+            <h4 className="font-label-lg text-label-lg text-on-surface font-extrabold flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-base text-primary">history</span>
+              Historial de Cierres Guardados
+            </h4>
+            <span className="font-label-sm text-label-sm text-secondary font-bold">
+              {savedClosures.length} {savedClosures.length === 1 ? 'registro' : 'registros'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {savedClosures.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between bg-surface-container-low p-2.5 rounded-lg"
+              >
+                <div>
+                  <p className="font-label-md text-label-md text-on-surface font-bold">
+                    {item.date} • {item.orders} viajes {item.isRainSurge ? '🌧️' : ''}
+                  </p>
+                  <p className="font-body-sm text-body-sm text-secondary">
+                    Efectivo neto: <strong className="text-on-surface">{formatMoney(item.netCashInHand)}</strong> • Ganancia:{' '}
+                    <strong className="text-tertiary">{formatMoney(item.pocketProfit)}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteClosure(item.id)}
+                  className="w-7 h-7 rounded-full bg-error-container text-on-error-container flex items-center justify-center active:scale-90"
+                  title="Eliminar registro"
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Micro-aviso Comunitario Jujuy */}
       <div className="flex items-center justify-center gap-1.5 text-center py-2 text-secondary font-body-sm text-body-sm">
         <span className="material-symbols-outlined text-sm text-primary">local_shipping</span>
-        <span>Ajustado con base $1.900/envío + pendiente promedio Jujuy</span>
+        <span>Ajustado con base $2.044/envío + pendiente promedio Jujuy</span>
       </div>
 
       {/* Toast Feedback */}

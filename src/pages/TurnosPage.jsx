@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 const INITIAL_SHIFTS = [
   {
     id: 'seed-shift-1',
+    day_id: 'vie24',
     type: 'suelto',
     typeBadge: 'Suelto / Cedo libre',
     timeAgo: 'Hace 4m',
@@ -20,6 +21,7 @@ const INITIAL_SHIFTS = [
   },
   {
     id: 'seed-shift-2',
+    day_id: 'vie24',
     type: 'permuto',
     typeBadge: 'Permuto por Turno Mediodía',
     timeAgo: 'Hace 12m',
@@ -34,6 +36,7 @@ const INITIAL_SHIFTS = [
   },
   {
     id: 'seed-shift-3',
+    day_id: 'sab25',
     type: 'urgente',
     typeBadge: 'Urgente • Motivo Mecánico',
     timeAgo: 'Hace 25m',
@@ -55,21 +58,30 @@ export default function TurnosPage() {
   const [selectedDay, setSelectedDay] = useState('vie24');
   const [activeFilter, setActiveFilter] = useState('all');
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [publishDay, setPublishDay] = useState('vie24');
   const [publishType, setPublishType] = useState('ceder');
   const [publishZone, setPublishZone] = useState('Centro / San Pedrito');
   const [startTime, setStartTime] = useState('12:30');
   const [endTime, setEndTime] = useState('16:00');
   const [publishComment, setPublishComment] = useState('');
   const [savingShift, setSavingShift] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
 
   const [takenShifts, setTakenShifts] = useState({});
   const [shifts, setShifts] = useState(INITIAL_SHIFTS);
 
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+  };
+
   const days = [
-    { id: 'vie24', label: 'Hoy', date: 'Vie 24', slots: '6 cupos' },
-    { id: 'sab25', label: 'Mañana', date: 'Sáb 25', slots: '4 cupos' },
-    { id: 'dom26', label: 'Domingo', date: 'Dom 26', slots: '2 cupos' },
-    { id: 'lun27', label: 'Lunes', date: 'Lun 27', slots: '0 cupos' },
+    { id: 'vie24', label: 'Hoy', date: 'Vie 24' },
+    { id: 'sab25', label: 'Mañana', date: 'Sáb 25' },
+    { id: 'dom26', label: 'Domingo', date: 'Dom 26' },
+    { id: 'lun27', label: 'Lunes', date: 'Lun 27' },
   ];
 
   const fetchShifts = useCallback(async () => {
@@ -84,6 +96,7 @@ export default function TurnosPage() {
         const mapped = data.map((row) => ({
           id: row.id,
           user_id: row.user_id,
+          day_id: row.day_id || 'vie24',
           type: row.type || 'suelto',
           typeBadge: row.type_badge || 'Suelto / Cedo libre',
           timeAgo: 'Reciente',
@@ -100,7 +113,10 @@ export default function TurnosPage() {
           takenBy: row.taken_by,
           isFromDb: true,
         }));
-        setShifts([...mapped, ...INITIAL_SHIFTS]);
+        setShifts((prev) => {
+          const remainingSeeds = prev.filter((s) => s.id.toString().startsWith('seed-'));
+          return [...mapped, ...remainingSeeds];
+        });
       }
     } catch (err) {
       console.warn('Error cargando turnos de Supabase:', err);
@@ -109,6 +125,18 @@ export default function TurnosPage() {
 
   useEffect(() => {
     fetchShifts();
+
+    if (!isSupabaseConfigured) return;
+    const channel = supabase
+      .channel('public:shifts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts' }, () => {
+        fetchShifts();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchShifts]);
 
   const handleOpenPublishModal = () => {
@@ -122,6 +150,7 @@ export default function TurnosPage() {
       }
       return;
     }
+    setPublishDay(selectedDay);
     setIsPublishModalOpen(true);
   };
 
@@ -138,6 +167,11 @@ export default function TurnosPage() {
     }
 
     setTakenShifts((prev) => ({ ...prev, [shift.id]: true }));
+    showToast(
+      shift.type === 'permuto'
+        ? `Solicitud de permuta enviada a ${shift.cadete}`
+        : `¡Turno ${shift.time} asignado a tu perfil!`
+    );
 
     if (shift.isFromDb && isSupabaseConfigured) {
       await supabase.from('shifts').update({ taken_by: user.id }).eq('id', shift.id);
@@ -158,7 +192,7 @@ export default function TurnosPage() {
       user_id: user.id,
       cadete_name: cadeteName,
       cadete_score: `Score ${profile?.score ?? 98}% • Cadete Verificado`,
-      day_id: selectedDay,
+      day_id: publishDay,
       type: isSuelto ? 'suelto' : 'permuto',
       type_badge: isSuelto ? 'Suelto / Cedo libre' : 'Permuto / Cambio',
       time_range: `${startTime} – ${endTime}`,
@@ -177,6 +211,7 @@ export default function TurnosPage() {
           const uiShift = {
             id: data.id,
             user_id: data.user_id,
+            day_id: data.day_id || publishDay,
             type: data.type,
             typeBadge: data.type_badge,
             timeAgo: 'Ahora mismo',
@@ -197,6 +232,7 @@ export default function TurnosPage() {
         const localShift = {
           id: `local-shift-${Date.now()}`,
           user_id: user.id,
+          day_id: publishDay,
           type: newRow.type,
           typeBadge: newRow.type_badge,
           timeAgo: 'Ahora mismo',
@@ -213,8 +249,10 @@ export default function TurnosPage() {
         setShifts((prev) => [localShift, ...prev]);
       }
 
+      setSelectedDay(publishDay);
       setPublishComment('');
       setIsPublishModalOpen(false);
+      showToast('¡Turno publicado en el tablón!');
     } catch (err) {
       alert(`Error al publicar turno en Supabase: ${err.message}`);
     } finally {
@@ -230,12 +268,15 @@ export default function TurnosPage() {
         if (error) throw error;
       }
       setShifts((prev) => prev.filter((s) => s.id !== shift.id));
+      showToast('Turno eliminado del tablón');
     } catch (err) {
       alert(`No se pudo borrar el turno: ${err.message}`);
     }
   };
 
   const filteredShifts = shifts.filter((s) => {
+    const matchesDay = (s.day_id || 'vie24') === selectedDay;
+    if (!matchesDay) return false;
     if (activeFilter === 'all') return true;
     if (activeFilter === 'suelto') return s.type === 'suelto';
     if (activeFilter === 'permuto') return s.type === 'permuto';
@@ -270,6 +311,7 @@ export default function TurnosPage() {
         <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1 pb-1 -mx-1 px-1">
           {days.map((day) => {
             const isSelected = selectedDay === day.id;
+            const dayCount = shifts.filter((s) => (s.day_id || 'vie24') === day.id).length;
             return (
               <button
                 key={day.id}
@@ -298,7 +340,7 @@ export default function TurnosPage() {
                       : 'bg-surface-container text-secondary'
                   }`}
                 >
-                  {day.slots}
+                  {dayCount} {dayCount === 1 ? 'cupo' : 'cupos'}
                 </span>
               </button>
             );
@@ -400,136 +442,159 @@ export default function TurnosPage() {
 
       {/* Cards Feed (Shift Board) */}
       <div className="space-y-3.5">
-        {filteredShifts.map((shift) => {
-          const isTaken = takenShifts[shift.id] || Boolean(shift.takenBy);
-          const canDelete = Boolean(
-            (user && shift.user_id === user.id) || isAdmin
-          );
-
-          return (
-            <div
-              key={shift.id}
-              className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden border border-surface-container/50"
+        {filteredShifts.length === 0 ? (
+          <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col items-center text-center gap-2 border border-surface-container/50">
+            <span className="material-symbols-outlined text-3xl text-secondary">event_busy</span>
+            <p className="font-headline-md text-headline-md text-on-surface font-extrabold">
+              Sin turnos publicados en este filtro
+            </p>
+            <p className="font-body-sm text-body-sm text-secondary max-w-xs">
+              Sé el primero en ceder o permutar una franja horaria para este día en Jujuy.
+            </p>
+            <button
+              type="button"
+              onClick={handleOpenPublishModal}
+              className="mt-1 h-9 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-transform"
             >
-              <div
-                className={`absolute top-0 left-0 w-1.5 h-full ${
-                  shift.type === 'suelto'
-                    ? 'bg-tertiary-container'
-                    : shift.type === 'permuto'
-                    ? 'bg-secondary'
-                    : 'bg-error'
-                }`}
-              ></div>
+              <span className="material-symbols-outlined text-sm">add_circle</span>
+              Publicar Franja Aquí
+            </button>
+          </div>
+        ) : (
+          filteredShifts.map((shift) => {
+            const isTaken = takenShifts[shift.id] || Boolean(shift.takenBy);
+            const canDelete = Boolean(
+              (user && shift.user_id === user.id) ||
+                isAdmin ||
+                (canWriteMapAndShifts && shift.id.toString().startsWith('seed-'))
+            );
 
-              <div className="flex items-start justify-between gap-2 pl-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2.5 py-1 rounded-full font-label-sm text-label-sm font-extrabold uppercase tracking-wide inline-flex items-center gap-1 ${
-                      shift.type === 'suelto'
-                        ? 'bg-tertiary-container/15 text-tertiary'
-                        : shift.type === 'permuto'
-                        ? 'bg-secondary-container text-on-secondary-container'
-                        : 'bg-error-container text-on-error-container'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">
-                      {shift.type === 'suelto' ? 'verified' : 'swap_horiz'}
+            return (
+              <div
+                key={shift.id}
+                className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 relative overflow-hidden border border-surface-container/50"
+              >
+                <div
+                  className={`absolute top-0 left-0 w-1.5 h-full ${
+                    shift.type === 'suelto'
+                      ? 'bg-tertiary-container'
+                      : shift.type === 'permuto'
+                      ? 'bg-secondary'
+                      : 'bg-error'
+                  }`}
+                ></div>
+
+                <div className="flex items-start justify-between gap-2 pl-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2.5 py-1 rounded-full font-label-sm text-label-sm font-extrabold uppercase tracking-wide inline-flex items-center gap-1 ${
+                        shift.type === 'suelto'
+                          ? 'bg-tertiary-container/15 text-tertiary'
+                          : shift.type === 'permuto'
+                          ? 'bg-secondary-container text-on-secondary-container'
+                          : 'bg-error-container text-on-error-container'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-xs">
+                        {shift.type === 'suelto' ? 'verified' : 'swap_horiz'}
+                      </span>
+                      {shift.typeBadge}
                     </span>
-                    {shift.typeBadge}
-                  </span>
-                  <span className="font-body-sm text-body-sm text-secondary font-bold">
-                    {shift.timeAgo}
-                  </span>
+                    <span className="font-body-sm text-body-sm text-secondary font-bold">
+                      {shift.timeAgo}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {shift.highDemand && (
+                      <div className="flex items-center gap-1 bg-surface-container-low px-2 py-0.5 rounded-full">
+                        <span className="material-symbols-outlined text-xs text-primary-container">
+                          local_fire_department
+                        </span>
+                        <span className="font-label-sm text-label-sm font-bold text-on-surface">
+                          Demanda Alta
+                        </span>
+                      </div>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteShift(shift)}
+                        title="Borrar turno publicado"
+                        className="h-7 px-2.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center gap-1 active:scale-90 transition-transform"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                        <span>Borrar</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {shift.highDemand && (
-                    <div className="flex items-center gap-1 bg-surface-container-low px-2 py-0.5 rounded-full">
-                      <span className="material-symbols-outlined text-xs text-primary-container">
-                        local_fire_department
-                      </span>
-                      <span className="font-label-sm text-label-sm font-bold text-on-surface">
-                        Demanda Alta
-                      </span>
+
+                <div className="pl-1">
+                  <div className="flex items-center gap-1.5 text-on-surface">
+                    <span className="material-symbols-outlined text-xl text-primary-container">schedule</span>
+                    <span className="font-headline-md text-headline-md font-extrabold tracking-tight">
+                      {shift.time}
+                    </span>
+                    <span className="text-secondary font-label-md text-label-md font-medium">
+                      {shift.period}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-secondary mt-1">
+                    <span className="material-symbols-outlined text-sm text-secondary">navigation</span>
+                    <span className="font-body-md text-body-md font-medium text-on-surface">{shift.zone}</span>
+                    <span className="text-xs text-secondary">{shift.detail}</span>
+                  </div>
+                </div>
+
+                {/* Cadete Info Row */}
+                <div className="pl-1 pt-2 flex items-center justify-between bg-surface-container-low/60 p-2.5 rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <img
+                      className="w-8 h-8 rounded-full object-cover shadow-sm"
+                      src={shift.avatar}
+                      alt={shift.cadete}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
+                        {shift.cadete}
+                      </p>
+                      <p className="font-body-sm text-body-sm text-tertiary flex items-center gap-0.5 font-bold truncate">
+                        <span className="material-symbols-outlined text-xs">star</span>
+                        {shift.score}
+                      </p>
                     </div>
-                  )}
-                  {canDelete && (
+                  </div>
+
+                  {shift.type === 'permuto' ? (
                     <button
                       type="button"
-                      onClick={() => handleDeleteShift(shift)}
-                      title="Borrar turno publicado"
-                      className="w-7 h-7 rounded-full bg-error-container text-on-error-container flex items-center justify-center active:scale-90 transition-transform"
+                      onClick={() => handleTakeShift(shift)}
+                      className="h-11 px-4 rounded-full bg-tertiary-container text-on-tertiary font-label-md text-label-md font-bold shadow-md active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0"
                     >
-                      <span className="material-symbols-outlined text-sm">delete</span>
+                      <span className="material-symbols-outlined text-lg">chat</span>
+                      {isTaken ? 'Solicitado' : 'WhatsApp'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleTakeShift(shift)}
+                      className={`h-11 px-5 rounded-full font-label-lg text-label-lg font-bold shadow-md active:scale-95 transition-all flex items-center gap-1 flex-shrink-0 ${
+                        isTaken
+                          ? 'bg-tertiary-container text-on-tertiary'
+                          : 'bg-primary-container text-on-primary-container'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        {isTaken ? 'done_all' : 'touch_app'}
+                      </span>
+                      {isTaken ? '¡Asignado!' : 'Agarrar Turno'}
                     </button>
                   )}
                 </div>
               </div>
-
-              <div className="pl-1">
-                <div className="flex items-center gap-1.5 text-on-surface">
-                  <span className="material-symbols-outlined text-xl text-primary-container">schedule</span>
-                  <span className="font-headline-md text-headline-md font-extrabold tracking-tight">
-                    {shift.time}
-                  </span>
-                  <span className="text-secondary font-label-md text-label-md font-medium">
-                    {shift.period}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-secondary mt-1">
-                  <span className="material-symbols-outlined text-sm text-secondary">navigation</span>
-                  <span className="font-body-md text-body-md font-medium text-on-surface">{shift.zone}</span>
-                  <span className="text-xs text-secondary">{shift.detail}</span>
-                </div>
-              </div>
-
-              {/* Cadete Info Row */}
-              <div className="pl-1 pt-2 flex items-center justify-between bg-surface-container-low/60 p-2.5 rounded-lg">
-                <div className="flex items-center gap-2 min-w-0">
-                  <img
-                    className="w-8 h-8 rounded-full object-cover shadow-sm"
-                    src={shift.avatar}
-                    alt={shift.cadete}
-                  />
-                  <div className="min-w-0">
-                    <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
-                      {shift.cadete}
-                    </p>
-                    <p className="font-body-sm text-body-sm text-tertiary flex items-center gap-0.5 font-bold truncate">
-                      <span className="material-symbols-outlined text-xs">star</span>
-                      {shift.score}
-                    </p>
-                  </div>
-                </div>
-
-                {shift.type === 'permuto' ? (
-                  <button
-                    type="button"
-                    onClick={() => handleTakeShift(shift)}
-                    className="h-11 px-4 rounded-full bg-tertiary-container text-on-tertiary font-label-md text-label-md font-bold shadow-md active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0"
-                  >
-                    <span className="material-symbols-outlined text-lg">chat</span>
-                    {isTaken ? 'Solicitado' : 'WhatsApp'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleTakeShift(shift)}
-                    className={`h-11 px-5 rounded-full font-label-lg text-label-lg font-bold shadow-md active:scale-95 transition-all flex items-center gap-1 flex-shrink-0 ${
-                      isTaken
-                        ? 'bg-tertiary-container text-on-tertiary'
-                        : 'bg-primary-container text-on-primary-container'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      {isTaken ? 'done_all' : 'touch_app'}
-                    </span>
-                    {isTaken ? '¡Asignado!' : 'Agarrar Turno'}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* Modal Publicar Franja */}
@@ -550,6 +615,28 @@ export default function TurnosPage() {
             </div>
 
             <div className="space-y-3">
+              <div>
+                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
+                  Día del Turno
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {days.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setPublishDay(d.id)}
+                      className={`py-2 px-2 rounded-xl font-label-sm text-label-sm font-bold text-center transition-colors ${
+                        publishDay === d.id
+                          ? 'bg-primary-container text-on-primary-container'
+                          : 'bg-surface-container-low text-on-surface'
+                      }`}
+                    >
+                      {d.date}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
                   Tipo de Publicación
@@ -593,6 +680,8 @@ export default function TurnosPage() {
                   <option>Ciudad de Nieva / Los Perales</option>
                   <option>Alto Comedero (Ruta 9)</option>
                   <option>Cuyaya / Moreno / Terminal</option>
+                  <option>Chijra / La Viña</option>
+                  <option>Palpalá (Ruta 66)</option>
                 </select>
               </div>
 
@@ -648,6 +737,14 @@ export default function TurnosPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Feedback */}
+      {toastMessage && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-4 py-2.5 rounded-full shadow-xl font-body-sm text-body-sm flex items-center gap-2 z-50 animate-in fade-in slide-in-from-bottom duration-200">
+          <span className="material-symbols-outlined text-tertiary-fixed text-base">check_circle</span>
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>

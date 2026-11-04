@@ -37,13 +37,13 @@
 
 ---
 
-### ⏳ Fase 4 - Tablón de Turnos y Calculadora Financiera
-- **Turnos Dinámicos:** Sistema en tiempo real de oferta/cesión de turnos entre cadetes verificados.
-- **Calculadora Operativa:** Lógica reactiva para calcular rendimiento de nafta, recaudación en efectivo, tarifas con plus por clima (+25%) y balance neto del turno.
+### ✅ Fase 4 - Tablón de Turnos y Calculadora Financiera (COMPLETADA)
+- **Turnos Dinámicos (`src/pages/TurnosPage.jsx`):** Sistema en tiempo real con Supabase (`public.shifts`) de oferta, cesión, permuta y **eliminación de turnos publicados** entre cadetes verificados, con filtrado por día y zona.
+- **Calculadora Operativa (`src/pages/CalculadoraPage.jsx`):** Lógica reactiva para calcular rendimiento de nafta YPF, recaudación en efectivo, tarifas con plus por clima (+25%), gastos extra, **saldo neto en efectivo tras restar gastos**, ganancia neta de bolsillo, historial de cierres guardados y reporte por WhatsApp.
 
 ---
 
-### ⏳ Fase 5 - Directorio Local, Marketplace y Preparación PWA
-- **Directorio de Servicios:** Base de datos de gomerías 24h, talleres y repuesteras de Jujuy y Palpalá con llamada directa y estado de turno.
-- **Mercado Cadete:** Catálogo de compra/venta de repuestos, accesorios e indumentaria para cadetes emprendedores.
-- **Optimización PWA:** Configuración de `manifest.json`, iconografía y soporte para guardado en pantalla de inicio del teléfono móvil.
+### ✅ Fase 5 - Directorio Local, Marketplace y Preparación PWA (COMPLETADA)
+- **Directorio de Servicios (`src/pages/DirectorioPage.jsx`):** Base de datos de gomerías 24h, talleres, repuesteras y líneas directas de cocina de San Salvador de Jujuy, Alto Comedero y Palpalá con buscador instantáneo sin tildes (`"Gomería"`, `"Palpalá"`), llamada directa, WhatsApp y navegación Google Maps.
+- **Mercado Cadete (`Feria Cadete Jujuy`):** Catálogo en tiempo real (`public.directory_items`) de compra/venta de mochilas, cascos, indumentaria y repuestos para cadetes emprendedores (Nivel 3) con sello "Vendedor Confiable".
+- **Optimización PWA (`public/manifest.json`, `public/icon.svg`, `public/sw.js`):** Manifiesto web, iconografía oficial y Service Worker para instalar la aplicación en la pantalla de inicio del teléfono móvil.

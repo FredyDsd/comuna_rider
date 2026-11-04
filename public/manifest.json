@@ -1,0 +1,22 @@
+{
+  "name": "Comuna Rider — Cadetes Jujuy",
+  "short_name": "Comuna Rider",
+  "description": "Plataforma comunitaria Mobile-First para repartidores y cadetes en San Salvador de Jujuy, Alto Comedero y Palpalá.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6f8",
+  "theme_color": "#ea0029",
+  "lang": "es-AR",
+  "categories": ["navigation", "utilities", "finance", "social"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
