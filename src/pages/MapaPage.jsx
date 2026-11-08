@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import JujuyMap, { JUJUY_ZONES_COORDS } from '../components/JujuyMap';
+import JujuyMap, { JUJUY_MACRO_ZONES, JUJUY_ZONES_COORDS } from '../components/JujuyMap';
 
 const INITIAL_ALERTS = [
   {
@@ -10,12 +10,12 @@ const INITIAL_ALERTS = [
     type: 'critical',
     badge: 'Crítica • Tránsito y Grúa',
     time: 'Hace 12 min',
-    title: 'Rotonda Chango Más / Acceso Sur',
+    title: 'Rotonda Chango Más / Coronel Arias',
     desc: 'Operativo fuerte y grúa municipal activa. Pidiendo estrictamente seguro al día, casco reglamentario y VTV. Reportado por Nico R. (Moto).',
     confirmCount: 14,
     verified: true,
     category: 'gruas',
-    zone: 'Centro',
+    zone: 'Centro y Barrios',
     lat: -24.1985,
     lng: -65.2912,
   },
@@ -24,58 +24,103 @@ const INITIAL_ALERTS = [
     type: 'warning',
     badge: 'Operativo Vial',
     time: 'Hace 18 min',
-    title: 'Cerro Las Rosas / Av. Párroco Marske',
-    desc: 'Inspección de luces delanteras/traseras e indumentaria refractaria a cadetes que bajan hacia el sur. Sin retenciones por ahora.',
+    title: 'Av. 10 de Junio / Barrio Malvinas',
+    desc: 'Inspección de luces delanteras/traseras e indumentaria refractaria a cadetes en el ingreso a Malvinas y Coronel Arias.',
     confirmCount: 8,
     verified: false,
     author: 'Cadete: Franco L.',
     category: 'gruas',
-    zone: 'Cuyaya',
-    lat: -24.1952,
-    lng: -65.3045,
+    zone: 'Centro y Barrios',
+    lat: -24.2082,
+    lng: -65.2825,
   },
   {
     id: 'seed-3',
     type: 'weather',
     badge: 'Vía Intransitable',
     time: 'Hace 22 min',
-    title: 'Colectora Suipacha / Chijra (Badén)',
+    title: 'Colectora Suipacha / Chijra y Los Perales',
     desc: 'Badén crecido con arrastre de barro por lluvia en la cuenca alta. No meter moto chica ni bicicleta. Desvío sugerido por Puente Senador Pérez.',
     confirmCount: 21,
     verified: false,
     extra: 'Desvío +4 min',
     category: 'lluvia',
-    zone: 'Chijra',
+    zone: 'Centro y Barrios',
     lat: -24.171,
     lng: -65.2878,
   },
   {
     id: 'seed-4',
+    type: 'critical',
+    badge: 'Control Ruta 9 • Alto Comedero',
+    time: 'Hace 27 min',
+    title: 'Acceso Sur / Nueva Terminal y Av. Forestal',
+    desc: 'Control caminera en colectora Ruta 9 altura pasarela Sargento Cabral. Pidiendo cédula y casco abrochado.',
+    confirmCount: 16,
+    verified: true,
+    category: 'gruas',
+    zone: 'Alto Comedero',
+    lat: -24.2345,
+    lng: -65.261,
+  },
+  {
+    id: 'seed-5',
     type: 'security',
-    badge: 'Alerta Seguridad / Cliente',
+    badge: 'Alerta Ruta 66 • Palpalá',
     time: 'Hace 31 min',
-    title: 'Barrio Cuyaya (Calle Olavarría alt. 400)',
-    desc: 'Usuario con cuenta nueva haciendo pedidos reiterados con pago en efectivo falso / intenta cobrar vuelto antes de recibir. Cobren antes de soltar la mochila.',
-    confirmCount: 19,
-    verified: false,
-    author: 'Comunidad Cadetes SSJ',
-    category: 'cuponeros',
-    zone: 'Cuyaya',
-    lat: -24.1885,
-    lng: -65.3128,
+    title: 'Av. Martijena esq. Libertad (Palpalá)',
+    desc: 'Calzada resbaladiza y control municipal frente a la rotonda de acceso a Palpalá. Precaución al doblar.',
+    confirmCount: 11,
+    verified: true,
+    author: 'Comunidad Cadetes Palpalá',
+    category: 'gruas',
+    zone: 'Palpalá',
+    lat: -24.2565,
+    lng: -65.2115,
   },
 ];
+
+function decodeWmoWeather(code) {
+  if (code === 0) return { desc: 'Despejado', icon: 'wb_sunny' };
+  if (code === 1 || code === 2) return { desc: 'Algo Nublado', icon: 'partly_cloudy_day' };
+  if (code === 3) return { desc: 'Nublado', icon: 'cloud' };
+  if (code === 45 || code === 48) return { desc: 'Neblina / Bancos', icon: 'foggy' };
+  if (code >= 51 && code <= 57) return { desc: 'Llovizna Ligera', icon: 'rainy' };
+  if (code >= 61 && code <= 67) return { desc: 'Lluvia Activa', icon: 'rainy' };
+  if (code >= 80 && code <= 82) return { desc: 'Chaparrones', icon: 'rainy' };
+  if (code >= 95) return { desc: 'Tormenta Eléctrica', icon: 'thunderstorm' };
+  return { desc: 'Nubosidad Variable', icon: 'cloud' };
+}
 
 export default function MapaPage() {
   const navigate = useNavigate();
   const { user, profile, canWriteMapAndShifts, isAdmin } = useAuth();
 
-  const [selectedZone, setSelectedZone] = useState('Centro');
+  const [selectedZone, setSelectedZone] = useState('Centro y Barrios');
+  const [selectedSubzone, setSelectedSubzone] = useState('Microcentro');
+  const [selectedSubzoneCoords, setSelectedSubzoneCoords] = useState(null);
+  const [isShowingSubzones, setIsShowingSubzones] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [confirmedAlerts, setConfirmedAlerts] = useState({});
   const [pickedCoords, setPickedCoords] = useState(null);
+  const [isPlacingPin, setIsPlacingPin] = useState(false);
+  const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
+  const hourlyScrollRef = useRef(null);
+  const weatherIdleTimerRef = useRef(null);
+  const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
+  const [weather, setWeather] = useState({
+    temp: 17,
+    feelsLike: 16,
+    humidity: 60,
+    wind: 7,
+    rainProb: 0,
+    desc: 'Nublado',
+    icon: 'cloud',
+    source: 'SMN Jujuy',
+    hourly: [],
+  });
 
   // Estado del formulario de nuevo pin en el modal
   const [reportCategory, setReportCategory] = useState('gruas');
@@ -85,16 +130,24 @@ export default function MapaPage() {
   );
   const [savingAlert, setSavingAlert] = useState(false);
 
-  const zones = [
-    'Centro',
-    'Alto Comedero',
-    'Nueva Terminal',
-    'Cuyaya',
-    'Chijra',
-    'La Viña',
-    'Los Perales',
-    'Palpalá',
-  ];
+  const macroZonesList = Object.values(JUJUY_MACRO_ZONES);
+  const currentMacroZone =
+    JUJUY_MACRO_ZONES[selectedZone] || JUJUY_MACRO_ZONES['Centro y Barrios'];
+
+  const handleSelectMacroZone = (zoneId) => {
+    setSelectedZone(zoneId);
+    const nextMacro = JUJUY_MACRO_ZONES[zoneId];
+    if (nextMacro?.subzones?.[0]) {
+      setSelectedSubzone(nextMacro.subzones[0].name);
+    }
+    setSelectedSubzoneCoords(null);
+    setIsShowingSubzones(true);
+  };
+
+  const handleSelectSubzone = (sub) => {
+    setSelectedSubzone(sub.name);
+    setSelectedSubzoneCoords(sub.coords);
+  };
 
   const fetchAlerts = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -134,20 +187,109 @@ export default function MapaPage() {
     fetchAlerts();
   }, [fetchAlerts]);
 
-  const handleOpenReportModal = (coords = null) => {
+  // Consultar clima en vivo y pronóstico por hora (Temperatura, Precipitación y Viento)
+  useEffect(() => {
+    let active = true;
+    const coords = selectedSubzoneCoords || currentMacroZone.center || [-24.1858, -65.2995];
+    const [lat, lng] = coords;
+
+    async function loadWeather() {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,weather_code&forecast_days=2&timezone=America%2FArgentina%2FJujuy`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!active || !data?.current) return;
+
+        const wmo = decodeWmoWeather(data.current.weather_code);
+        const nowHour = new Date().getHours();
+        const rainProb =
+          data?.hourly?.precipitation_probability?.[nowHour] ??
+          (data.current.precipitation > 0 ? 80 : 10);
+
+        const hourlyItems = [];
+        if (data?.hourly?.time) {
+          for (let i = nowHour; i < nowHour + 12 && i < data.hourly.time.length; i++) {
+            const rawTime = data.hourly.time[i] || '';
+            const hourLabel = rawTime.split('T')[1] || `${i % 24}:00`;
+            const hWmo = decodeWmoWeather(data.hourly.weather_code?.[i] ?? 3);
+            hourlyItems.push({
+              hour: i === nowHour ? 'Ahora' : hourLabel,
+              temp: Math.round(data.hourly.temperature_2m?.[i] ?? data.current.temperature_2m),
+              rainProb: Math.round(data.hourly.precipitation_probability?.[i] ?? 0),
+              precipMm: Number(data.hourly.precipitation?.[i] ?? 0).toFixed(1),
+              wind: Math.round(data.hourly.wind_speed_10m?.[i] ?? 0),
+              icon: hWmo.icon,
+            });
+          }
+        }
+
+        setWeather({
+          temp: Math.round(data.current.temperature_2m),
+          feelsLike: Math.round(data.current.apparent_temperature),
+          humidity: Math.round(data.current.relative_humidity_2m),
+          wind: Math.round(data.current.wind_speed_10m),
+          rainProb,
+          desc: wmo.desc,
+          icon: wmo.icon,
+          source: 'SMN Jujuy',
+          hourly: hourlyItems,
+        });
+      } catch {
+        // Mantiene último estado válido si no hay conexión
+      }
+    }
+
+    loadWeather();
+    return () => {
+      active = false;
+    };
+  }, [selectedZone, selectedSubzoneCoords, currentMacroZone.center]);
+
+  // Reinicia el contador de 25 segundos cada vez que el usuario interactúa con las tarjetitas
+  const resetWeatherIdleTimer = useCallback(() => {
+    if (weatherIdleTimerRef.current) {
+      clearTimeout(weatherIdleTimerRef.current);
+    }
+    weatherIdleTimerRef.current = setTimeout(() => {
+      setIsWeatherExpanded(false);
+    }, 25000);
+  }, []);
+
+  useEffect(() => {
+    if (!isWeatherExpanded) {
+      if (weatherIdleTimerRef.current) {
+        clearTimeout(weatherIdleTimerRef.current);
+      }
+      return;
+    }
+    resetWeatherIdleTimer();
+    return () => {
+      if (weatherIdleTimerRef.current) {
+        clearTimeout(weatherIdleTimerRef.current);
+      }
+    };
+  }, [isWeatherExpanded, resetWeatherIdleTimer]);
+
+  const handleStartAddAlert = () => {
     if (!canWriteMapAndShifts) {
       if (
         window.confirm(
-          '🔒 Acción restringida (Nivel 1: Visitante).\nSolo los Cadetes Verificados pueden agregar pines al mapa. ¿Querés ir a Mi Perfil para iniciar sesión o registrarte?'
+          '🔒 Acción restringida (Nivel 1: Visitante).\nSolo los Cadetes Verificados pueden agregar alertas al mapa. ¿Querés ir a Mi Perfil para iniciar sesión o registrarte?'
         )
       ) {
         navigate('/perfil');
       }
       return;
     }
-    if (coords && typeof coords.lat === 'number') {
-      setPickedCoords(coords);
-    }
+    // Si ya estaba en modo ubicar pin, lo cancela; si no, activa el pin arrastrable
+    setIsPlacingPin((prev) => !prev);
+  };
+
+  const handlePinPlaced = (coords) => {
+    setPickedCoords(coords);
+    setIsPlacingPin(false);
     setIsReportModalOpen(true);
   };
 
@@ -166,7 +308,8 @@ export default function MapaPage() {
     setSavingAlert(true);
     const authorName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Verificado';
     const vehicle = profile?.vehicle || 'Moto';
-    const defaultZoneCoords = JUJUY_ZONES_COORDS[selectedZone] || [-24.1858, -65.2995];
+    const defaultZoneCoords =
+      selectedSubzoneCoords || JUJUY_ZONES_COORDS[selectedZone] || [-24.1858, -65.2995];
     const finalLat = pickedCoords?.lat ?? defaultZoneCoords[0];
     const finalLng = pickedCoords?.lng ?? defaultZoneCoords[1];
 
@@ -314,16 +457,16 @@ export default function MapaPage() {
   });
 
   return (
-    <div className="flex flex-col w-full pb-6 space-y-space-md pt-2">
-      {/* Sub-banner Contextual / Barra de Estado Operativa */}
-      <div className="relative overflow-hidden rounded-xl bg-primary-container text-on-primary-container p-space-md shadow-md">
-        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
-        <div className="relative z-10 flex flex-col space-y-space-sm">
+    <div className="flex flex-col w-full pb-6 space-y-3 pt-1.5">
+      {/* Sub-banner Compacto: Muestra las 3 Zonas o los Sub-barrios en la misma fila sin agrandar la caja */}
+      <div className="relative overflow-hidden rounded-xl bg-primary-container text-on-primary-container p-3 shadow-md">
+        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+        <div className="relative z-10 flex flex-col space-y-2">
           <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-tertiary-fixed animate-ping"></span>
               <span className="font-label-sm text-label-sm text-on-primary-container tracking-wider uppercase font-extrabold">
-                Radar Comunitario SSJ
+                {isShowingSubzones ? `Zona: ${selectedZone}` : 'Radar Comunitario • 3 Zonas'}
               </span>
             </div>
             <div className="flex items-center gap-1 text-on-primary-container/90">
@@ -332,101 +475,244 @@ export default function MapaPage() {
             </div>
           </div>
 
-          <div className="flex flex-col">
-            <span className="font-body-sm text-body-sm text-on-primary-container/80">
-              Zona de Operación Actual (Tocá para mover el mapa)
-            </span>
-            {/* Selector interactivo de Zona Pills en Scroll Horizontal */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1.5">
-              {zones.map((zone) => {
-                const isSelected = selectedZone === zone;
-                return (
-                  <button
-                    key={zone}
-                    type="button"
-                    onClick={() => setSelectedZone(zone)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full font-label-md text-label-md transition-colors flex items-center gap-1 ${
-                      isSelected
-                        ? 'bg-surface-container-lowest text-primary shadow-sm font-bold'
-                        : 'bg-white/15 text-on-primary-container hover:bg-white/25'
-                    }`}
-                  >
-                    {isSelected && (
-                      <span
-                        className="material-symbols-outlined text-sm"
-                        style={{ fontVariationSettings: "'FILL' 1" }}
-                      >
-                        my_location
-                      </span>
-                    )}
-                    {zone}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Única fila intercambiable (altura fija h-9 para no expandir la tarjeta) */}
+          <div className="h-9 flex items-center">
+            {!isShowingSubzones ? (
+              <div className="grid grid-cols-3 gap-1.5 w-full">
+                {macroZonesList.map((zone) => {
+                  const isSelected = selectedZone === zone.id;
+                  return (
+                    <button
+                      key={zone.id}
+                      type="button"
+                      onClick={() => handleSelectMacroZone(zone.id)}
+                      className={`h-9 px-2 rounded-xl font-label-md text-label-md transition-all flex items-center justify-center gap-1 text-center active:scale-95 ${
+                        isSelected
+                          ? 'bg-surface-container-lowest text-primary shadow-sm font-extrabold'
+                          : 'bg-white/15 text-on-primary-container hover:bg-white/25 font-bold'
+                      }`}
+                    >
+                      {isSelected && (
+                        <span
+                          className="material-symbols-outlined text-xs"
+                          style={{ fontVariationSettings: "'FILL' 1" }}
+                        >
+                          my_location
+                        </span>
+                      )}
+                      <span className="truncate">{zone.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 w-full overflow-x-auto no-scrollbar">
+                {/* Botón fijo para volver a elegir cualquiera de las 3 zonas */}
+                <button
+                  type="button"
+                  onClick={() => setIsShowingSubzones(false)}
+                  className="flex-shrink-0 h-8 px-2.5 rounded-full bg-surface-container-lowest text-primary font-label-sm text-label-sm font-extrabold flex items-center gap-1 shadow-xs active:scale-95"
+                  title="Volver a las 3 zonas"
+                >
+                  <span className="material-symbols-outlined text-sm">arrow_back</span>
+                  <span>Zonas</span>
+                </button>
+
+                {/* Sub-barrios en el mismo lugar */}
+                {currentMacroZone.subzones.map((sub) => {
+                  const isSubActive = selectedSubzone === sub.name && selectedSubzoneCoords !== null;
+                  return (
+                    <button
+                      key={sub.name}
+                      type="button"
+                      onClick={() => handleSelectSubzone(sub)}
+                      className={`flex-shrink-0 h-8 px-2.5 rounded-full font-label-sm text-label-sm transition-colors flex items-center gap-1 active:scale-95 ${
+                        isSubActive
+                          ? 'bg-tertiary-fixed text-on-tertiary-fixed font-extrabold shadow-xs'
+                          : 'bg-black/25 text-on-primary-container hover:bg-black/35 font-bold'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-xs">pin_drop</span>
+                      {sub.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Widget de Clima y Tarifa Dinámica en Jujuy */}
-      <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between gap-space-sm">
-        <div className="flex items-center gap-space-sm min-w-0">
-          <div className="w-12 h-12 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0">
-            <span
-              className="material-symbols-outlined text-2xl text-primary"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              rainy
-            </span>
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-label-lg text-label-lg text-on-surface truncate">
-                Llovizna Ligera • 19°C
-              </span>
-              <span className="px-1.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-extrabold flex-shrink-0">
-                +25% TARIFA
+      {/* Widget de Clima en Vivo (Solo la parte superior abre/cierra; las tarjetas inferiores se deslizan libremente) */}
+      <div className="bg-surface-container-lowest rounded-xl p-3 shadow-sm flex flex-col gap-2.5 border border-surface-container/50 select-none transition-all duration-200 hover:border-primary/30">
+        {/* Parte superior: único disparador para desplegar o replegar */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setIsWeatherExpanded((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsWeatherExpanded((prev) => !prev);
+            }
+          }}
+          className="flex items-center justify-between gap-2.5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0">
+              <span
+                className="material-symbols-outlined text-xl text-primary"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                {weather.icon}
               </span>
             </div>
-            <p className="font-body-sm text-body-sm text-secondary truncate">
-              Demanda alta en {selectedZone} y alrededores
-            </p>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                  {weather.desc} • {weather.temp}°C
+                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-[10px] font-extrabold flex-shrink-0">
+                  {weather.source}
+                </span>
+              </div>
+              <p className="font-body-sm text-body-sm text-secondary truncate">
+                Humedad {weather.humidity}% • Viento {weather.wind} km/h • {selectedSubzone}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-col items-end">
+              <span className="font-label-lg text-label-lg text-on-surface font-extrabold tracking-tight">
+                ST {weather.feelsLike}°C
+              </span>
+              <span className="font-label-sm text-label-sm text-secondary">
+                🌧️ {weather.rainProb}% lluvia
+              </span>
+            </div>
+            <span className="material-symbols-outlined text-secondary text-lg">
+              {isWeatherExpanded ? 'expand_less' : 'expand_more'}
+            </span>
           </div>
         </div>
-        <div className="flex flex-col items-end flex-shrink-0">
-          <span className="font-headline-md text-headline-md text-primary font-black tracking-tight">
-            +$480
-          </span>
-          <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider">
-            x Pedido
-          </span>
-        </div>
+
+        {/* Panel desplegable con pronóstico de las próximas 12 horas (Deslizable a los laterales) */}
+        {isWeatherExpanded && (
+          <div className="pt-2 border-t border-surface-container space-y-2 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between text-secondary">
+              <span className="font-label-sm text-label-sm uppercase tracking-wider font-extrabold text-primary">
+                Próximas 12 Horas ({selectedSubzone})
+              </span>
+              <span className="font-label-sm text-[10px] text-secondary">
+                Deslizá ↔ • Tocá arriba para cerrar
+              </span>
+            </div>
+
+            <div
+              ref={hourlyScrollRef}
+              onScroll={resetWeatherIdleTimer}
+              onTouchStart={resetWeatherIdleTimer}
+              onTouchMove={resetWeatherIdleTimer}
+              onTouchEnd={resetWeatherIdleTimer}
+              onMouseDown={(e) => {
+                resetWeatherIdleTimer();
+                const el = hourlyScrollRef.current;
+                if (!el) return;
+                dragScrollState.current = {
+                  isDown: true,
+                  startX: e.pageX - el.offsetLeft,
+                  scrollLeft: el.scrollLeft,
+                };
+              }}
+              onMouseLeave={() => {
+                dragScrollState.current.isDown = false;
+              }}
+              onMouseUp={() => {
+                resetWeatherIdleTimer();
+                dragScrollState.current.isDown = false;
+              }}
+              onMouseMove={(e) => {
+                resetWeatherIdleTimer();
+                if (!dragScrollState.current.isDown || !hourlyScrollRef.current) return;
+                e.preventDefault();
+                const x = e.pageX - hourlyScrollRef.current.offsetLeft;
+                const walk = (x - dragScrollState.current.startX) * 1.4;
+                hourlyScrollRef.current.scrollLeft = dragScrollState.current.scrollLeft - walk;
+              }}
+              className="flex items-stretch gap-2 overflow-x-auto no-scrollbar pb-1 touch-pan-x cursor-grab active:cursor-grabbing"
+            >
+              {weather.hourly.map((h, idx) => (
+                <div
+                  key={`${h.hour}-${idx}`}
+                  className={`flex-shrink-0 min-w-[80px] rounded-lg p-2 flex flex-col items-center gap-1 text-center border ${
+                    idx === 0
+                      ? 'bg-primary-fixed/35 border-primary/30'
+                      : 'bg-surface-container-low border-surface-container'
+                  }`}
+                >
+                  <span className="font-label-sm text-label-sm font-extrabold text-on-surface">
+                    {h.hour}
+                  </span>
+                  <span
+                    className="material-symbols-outlined text-lg text-primary"
+                    style={{ fontVariationSettings: "'FILL' 1" }}
+                  >
+                    {h.icon}
+                  </span>
+                  {/* Temperatura */}
+                  <span className="font-label-md text-label-md font-extrabold text-on-surface">
+                    {h.temp}°C
+                  </span>
+                  {/* Precipitación */}
+                  <span className="font-label-sm text-[10px] text-primary font-bold flex items-center gap-0.5">
+                    🌧️ {h.rainProb}% ({h.precipMm}mm)
+                  </span>
+                  {/* Viento */}
+                  <span className="font-label-sm text-[10px] text-secondary font-medium flex items-center gap-0.5">
+                    💨 {h.wind} km/h
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mapa Interactivo Real de Jujuy (Leaflet + OpenStreetMap) */}
       <JujuyMap
         selectedZone={selectedZone}
+        selectedSubzoneCoords={selectedSubzoneCoords}
         alerts={alerts}
-        pickedCoords={pickedCoords}
-        onPickCoords={(coords) => setPickedCoords(coords)}
-        onOpenReportWithCoords={(coords) => handleOpenReportModal(coords)}
+        isPlacingPin={isPlacingPin}
+        onPinPlaced={handlePinPlaced}
+        onCancelPlacing={() => setIsPlacingPin(false)}
       />
 
-      {/* Botón Acción Rápida: Reportar Alerta en 1-Tap */}
+      {/* Botón Acción Rápida: Agregar Alerta (Habilita pin arrastrable en el mapa) */}
       <div className="flex items-center gap-2">
         <button
           id="btn-quick-report"
-          onClick={() => handleOpenReportModal(pickedCoords)}
-          className="flex-1 h-12 rounded-full bg-inverse-surface text-inverse-on-surface px-space-md flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-transform"
+          onClick={handleStartAddAlert}
+          className={`flex-1 h-12 rounded-full px-space-md flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all ${
+            isPlacingPin
+              ? 'bg-primary-container text-on-primary-container font-extrabold'
+              : 'bg-inverse-surface text-inverse-on-surface'
+          }`}
           type="button"
         >
-          <span className="material-symbols-outlined text-xl text-primary-fixed">
-            {canWriteMapAndShifts ? 'add_location_alt' : 'lock'}
+          <span
+            className={`material-symbols-outlined text-xl ${
+              isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
+            }`}
+          >
+            {!canWriteMapAndShifts ? 'lock' : isPlacingPin ? 'open_with' : 'add_location_alt'}
           </span>
           <span className="font-label-lg text-label-lg">
-            {canWriteMapAndShifts
-              ? 'Reportar Alerta en 1-Tap'
-              : 'Iniciar Sesión para Reportar Pin'}
+            {!canWriteMapAndShifts
+              ? 'Iniciar Sesión para Agregar Alerta'
+              : isPlacingPin
+              ? 'Arrastrá el Pin en el Mapa (Cancelar)'
+              : 'Agregar Alerta'}
           </span>
         </button>
         <button
