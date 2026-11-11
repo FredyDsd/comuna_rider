@@ -154,7 +154,7 @@ const normalizeText = (str = '') =>
 
 export default function DirectorioPage() {
   const navigate = useNavigate();
-  const { user, profile, canWriteMapAndShifts, canPublishFeria, isAdmin, updateProfile } = useAuth();
+  const { user, profile, canUseCadeteTools, canWriteMapAndShifts, canPublishFeria, isAdmin, updateProfile } = useAuth();
 
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -187,7 +187,7 @@ export default function DirectorioPage() {
     { id: 'gomerias', label: 'Gomerías 24hs', icon: 'tire_repair' },
     { id: 'mecanica', label: 'Mecánica & Repuestos', icon: 'build' },
     { id: 'locales', label: 'Teléfonos Locales', icon: 'call' },
-    { id: 'feria', label: 'Feria Cadete', icon: 'shopping_bag' },
+    ...(canUseCadeteTools ? [{ id: 'feria', label: 'Feria Cadete', icon: 'shopping_bag' }] : []),
   ];
 
   const quickSearchChips = ['Gomería', 'Palpalá', 'Alto Comedero', '24 HS', 'Repuestos'];
@@ -524,6 +524,7 @@ export default function DirectorioPage() {
     filteredLocales.length > 0;
 
   const showFeria =
+    canUseCadeteTools &&
     (activeCategory === 'all' || activeCategory === 'feria') &&
     (filteredFeria.length > 0 || !searchQuery.trim());
 

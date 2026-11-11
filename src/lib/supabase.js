@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
+const DEFAULT_SUPABASE_URL = 'https://rxxuekukdkqbdjhvrjla.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_d34vuzXTeauLD_ceCC8GOw_9QMYQjxS';
+
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
 const envKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
@@ -11,8 +14,8 @@ const storedUrl =
 const storedKey =
   typeof window !== 'undefined' ? window.localStorage.getItem('comuna_rider_supabase_key') : null;
 
-const rawUrl = storedUrl || envUrl || '';
-const rawKey = storedKey || envKey || '';
+const rawUrl = storedUrl || envUrl || DEFAULT_SUPABASE_URL;
+const rawKey = storedKey || envKey || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = Boolean(
   rawUrl &&

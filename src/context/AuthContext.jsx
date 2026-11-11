@@ -7,10 +7,18 @@ export const ROLES_INFO = {
   visitante: {
     level: 1,
     code: 'visitante',
-    name: 'Visitante / Novato',
-    badge: 'Nivel 1 • Solo Lectura',
+    name: 'Ciudadano (Sin sesión)',
+    badge: 'Nivel 1 • Ciudadano',
     description:
-      'Puede ver el Mapa de Alertas, el Tablón de Turnos y usar la Calculadora. No puede agregar pines, turnos ni ventas.',
+      'Puede consultar el Mapa de Alertas y el Directorio de Servicios. Iniciá sesión para reportar alertas en el mapa.',
+  },
+  ciudadano: {
+    level: 1,
+    code: 'ciudadano',
+    name: 'Ciudadano Registrado',
+    badge: 'Nivel 1 • Ciudadano',
+    description:
+      'Usuario registrado base. Puede ver y aportar alertas al Mapa y usar el Directorio. No ve Turnos, Calculadora ni Mercado hasta ser verificado como Cadete.',
   },
   cadete_verificado: {
     level: 2,
@@ -18,23 +26,23 @@ export const ROLES_INFO = {
     name: 'Cadete Verificado',
     badge: 'Nivel 2 • Cadete Verificado',
     description:
-      'Habilitado para colocar Pines de Alerta en el mapa y publicar/tomar turnos en el tablón (vinculado a su ID).',
+      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Calculadora y Mercado Cadete.',
   },
   cadete_emprendedor: {
     level: 3,
     code: 'cadete_emprendedor',
-    name: 'Cadete Emprendedor / Vendedor',
-    badge: 'Nivel 3 • Vendedor Confiable',
+    name: 'Emprendedor',
+    badge: 'Nivel 3 • Emprendedor',
     description:
-      'Todo lo del Nivel 2 + habilitado para publicar ventas en el Mercado Cadete con distintivo de Vendedor Confiable.',
+      'Cadete verificado con permisos de venta en el Mercado Cadete y sello de Vendedor Confiable.',
   },
   admin: {
     level: 4,
     code: 'admin',
-    name: 'Administrador',
-    badge: 'Nivel 4 • Administrador',
+    name: 'Moderador',
+    badge: 'Nivel 4 • Moderador',
     description:
-      'Dueño del sistema. Puede borrar alertas falsas, moderar el tablón de turnos, el mercado y gestionar usuarios.',
+      'Administrador de los grupos de WhatsApp. Puede aprobar solicitudes de Nivel 2/3, borrar alertas falsas y banear usuarios.',
   },
 };
 
@@ -65,8 +73,9 @@ export function AuthProvider({ children }) {
           extraMeta.full_name ||
           authUser.user_metadata?.full_name ||
           authUser.email?.split('@')[0] ||
-          'Cadete Jujuy',
-        role: extraMeta.role || authUser.user_metadata?.role || 'cadete_verificado',
+          'Vecino Jujuy',
+        role: 'ciudadano',
+        verification_status: 'none',
         vehicle: extraMeta.vehicle || authUser.user_metadata?.vehicle || 'Moto',
         zone: extraMeta.zone || authUser.user_metadata?.zone || 'Centro',
         status: 'online',
@@ -92,6 +101,11 @@ export function AuthProvider({ children }) {
       console.error('Error cargando perfil:', err);
       return null;
     }
+  };
+
+  const refreshProfile = async () => {
+    if (!user || !isSupabaseConfigured) return null;
+    return ensureProfile(user);
   };
 
   useEffect(() => {
@@ -145,7 +159,7 @@ export function AuthProvider({ children }) {
       options: {
         data: {
           full_name: fullName,
-          role: 'cadete_verificado',
+          role: 'ciudadano',
           vehicle,
           zone,
         },
@@ -157,7 +171,7 @@ export function AuthProvider({ children }) {
     if (data?.user) {
       await ensureProfile(data.user, {
         full_name: fullName,
-        role: 'cadete_verificado',
+        role: 'ciudadano',
         vehicle,
         zone,
       });
@@ -215,8 +229,8 @@ export function AuthProvider({ children }) {
         {
           id: user.id,
           email: user.email,
-          full_name: profile?.full_name || user.email?.split('@')[0] || 'Cadete Jujuy',
-          role: profile?.role || 'cadete_verificado',
+          full_name: profile?.full_name || user.email?.split('@')[0] || 'Vecino Jujuy',
+          role: profile?.role || 'ciudadano',
           vehicle: profile?.vehicle || 'Moto',
           zone: profile?.zone || 'Centro',
           status: profile?.status || 'online',
@@ -234,6 +248,18 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  // Nivel 1 envía solicitud de verificación con su número de WhatsApp
+  const requestCadeteVerification = async ({ whatsapp, vehicle, zone }) => {
+    if (!user) throw new Error('Iniciá sesión primero para solicitar la verificación.');
+    return updateProfile({
+      whatsapp: whatsapp.trim(),
+      vehicle: vehicle || profile?.vehicle || 'Moto',
+      zone: zone || profile?.zone || 'Centro',
+      verification_status: 'pending',
+      verification_requested_at: new Date().toISOString(),
+    });
+  };
+
   const signOut = async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
@@ -242,17 +268,32 @@ export function AuthProvider({ children }) {
     setProfile(null);
   };
 
-  const role = user ? profile?.role || 'cadete_verificado' : 'visitante';
-  const roleInfo = ROLES_INFO[role] || ROLES_INFO.visitante;
+  const role = user ? profile?.role || 'ciudadano' : 'visitante';
+  const roleInfo = ROLES_INFO[role] || ROLES_INFO.ciudadano;
   const isBanned = Boolean(profile?.is_banned);
 
-  // Permisos según USUARIOS.md
-  const canWriteMapAndShifts = Boolean(
+  // Permisos según las nuevas directivas de USUARIOS.md:
+  // 1. Mapa: cualquier usuario registrado no baneado (Nivel 1 Ciudadano, Nivel 2, 3 o 4) puede aportar alertas
+  const canWriteMap = Boolean(
+    user &&
+      !isBanned &&
+      ['ciudadano', 'visitante', 'cadete_verificado', 'cadete_emprendedor', 'admin'].includes(role)
+  );
+
+  // 2. Herramientas exclusivas de Cadetes (Turnos, Calculadora, ver Mercado Cadete): solo Nivel 2, 3 y 4
+  const canUseCadeteTools = Boolean(
     user && !isBanned && ['cadete_verificado', 'cadete_emprendedor', 'admin'].includes(role)
   );
+
+  // Compatibilidad con TurnosPage / Layout
+  const canWriteMapAndShifts = canUseCadeteTools;
+
+  // 3. Publicar ventas en el Mercado Cadete: solo Nivel 3 (Emprendedor) y Nivel 4 (Moderador)
   const canPublishFeria = Boolean(
     user && !isBanned && ['cadete_emprendedor', 'admin'].includes(role)
   );
+
+  // 4. Moderador (Nivel 4): aprueba solicitudes, borra alertas y banea
   const isAdmin = Boolean(user && !isBanned && role === 'admin');
 
   return (
@@ -263,7 +304,10 @@ export function AuthProvider({ children }) {
         role,
         roleInfo,
         loading,
+        isBanned,
         isSupabaseConfigured,
+        canWriteMap,
+        canUseCadeteTools,
         canWriteMapAndShifts,
         canPublishFeria,
         isAdmin,
@@ -271,6 +315,8 @@ export function AuthProvider({ children }) {
         signInWithEmail,
         signInWithGoogle,
         updateProfile,
+        requestCadeteVerification,
+        refreshProfile,
         signOut,
       }}
     >
@@ -286,4 +332,3 @@ export function useAuth() {
   }
   return ctx;
 }
-

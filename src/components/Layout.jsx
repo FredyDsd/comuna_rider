@@ -8,7 +8,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, canWriteMapAndShifts } = useAuth();
+  const { user, profile, canUseCadeteTools } = useAuth();
 
   const getScreenTitle = (path) => {
     switch (path) {
@@ -29,14 +29,8 @@ export default function Layout() {
   };
 
   const handleSosAuxilio = async () => {
-    if (!canWriteMapAndShifts || !user) {
-      if (
-        window.confirm(
-          '🚨 Para emitir una alerta SOS georreferenciada con tu ID de cadete debés iniciar sesión. ¿Ir a Mi Perfil?'
-        )
-      ) {
-        navigate('/perfil');
-      }
+    if (!canUseCadeteTools || !user) {
+      navigate('/perfil');
       return;
     }
 
@@ -73,19 +67,21 @@ export default function Layout() {
           <Outlet />
         </main>
 
-        {/* Floating SOS Auxilio Button */}
-        <aside className="fixed max-w-md w-full bottom-20 px-4 pointer-events-none z-40 flex justify-end">
-          <button
-            type="button"
-            onClick={handleSosAuxilio}
-            className="pointer-events-auto flex items-center gap-1.5 px-4 h-11 bg-primary-container text-on-primary-container rounded-full shadow-[0_8px_20px_rgba(234,0,41,0.38)] active:scale-95 transition-transform cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-lg animate-pulse">emergency</span>
-            <span className="font-label-md text-label-md tracking-wider uppercase font-black text-xs">
-              SOS Auxilio
-            </span>
-          </button>
-        </aside>
+        {/* Botón flotante SOS Auxilio (Exclusivo para Cadetes Verificados Nivel 2+) */}
+        {canUseCadeteTools && (
+          <aside className="fixed max-w-md w-full bottom-20 px-4 pointer-events-none z-40 flex justify-end">
+            <button
+              type="button"
+              onClick={handleSosAuxilio}
+              className="pointer-events-auto flex items-center gap-1.5 px-4 h-11 bg-primary-container text-on-primary-container rounded-full shadow-[0_8px_20px_rgba(234,0,41,0.38)] active:scale-95 transition-transform cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg animate-pulse">emergency</span>
+              <span className="font-label-md text-label-md tracking-wider uppercase font-black text-xs">
+                SOS Auxilio
+              </span>
+            </button>
+          </aside>
+        )}
 
         <BottomNav />
       </div>

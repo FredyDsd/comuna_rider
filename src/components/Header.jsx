@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Header({ title = 'Cadetes Jujuy' }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile, roleInfo } = useAuth();
+  const { user, profile, roleInfo, canUseCadeteTools } = useAuth();
 
   const initials = profile?.full_name
     ? profile.full_name
@@ -20,6 +20,9 @@ export default function Header({ title = 'Cadetes Jujuy' }) {
 
   const isOnline = !user || profile?.status !== 'paused';
   const isOnProfile = location.pathname === '/perfil';
+  const isPendingVerification = profile?.verification_status === 'pending' && !canUseCadeteTools;
+  const safeTitle =
+    !canUseCadeteTools && (title === 'Turnos' || title === 'Calculadora') ? 'Comuna Jujuy' : title;
 
   return (
     <header className="fixed top-0 w-full z-50 bg-primary-container text-on-primary-container pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.08)]">
@@ -52,21 +55,31 @@ export default function Header({ title = 'Cadetes Jujuy' }) {
         <div className="flex items-center gap-space-sm flex-shrink-0">
           <div className="flex flex-col items-end">
             <span className="font-label-sm text-label-sm font-extrabold uppercase text-on-primary-container/90">
-              {title}
+              {safeTitle}
             </span>
             {user ? (
               <span className="inline-flex items-center gap-1 font-label-sm text-label-sm text-tertiary-fixed">
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    isOnline ? 'bg-tertiary-fixed animate-pulse' : 'bg-amber-300'
+                    isPendingVerification
+                      ? 'bg-amber-300 animate-pulse'
+                      : isOnline
+                      ? 'bg-tertiary-fixed animate-pulse'
+                      : 'bg-amber-300'
                   }`}
                 ></span>
-                {isOnline ? `Nivel ${roleInfo.level} • Online` : 'En Pausa'}
+                {isPendingVerification
+                  ? '⏳ Verificación Pendiente'
+                  : canUseCadeteTools
+                  ? isOnline
+                    ? `Nivel ${roleInfo.level} • ${roleInfo.name}`
+                    : 'En Pausa'
+                  : 'Nivel 1 • Ciudadano'}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 font-label-sm text-label-sm text-on-primary-container/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-white/60"></span>
-                Visitante (N1)
+                Ciudadano (N1)
               </span>
             )}
           </div>

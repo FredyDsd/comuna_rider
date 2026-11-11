@@ -1,33 +1,67 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function BottomNav() {
-  const navItems = [
-    {
-      to: '/',
-      label: 'Mapa Jujuy',
-      icon: 'near_me',
-      badge: null,
-    },
-    {
-      to: '/turnos',
-      label: 'Turnos',
-      icon: 'calendar_clock',
-      badge: '3',
-    },
-    {
-      to: '/calculadora',
-      label: 'Calculadora',
-      icon: 'calculate',
-      badge: null,
-    },
-    {
-      to: '/directorio',
-      label: 'Directorio',
-      icon: 'handyman',
-      badge: null,
-    },
-  ];
+  const { canUseCadeteTools, isAdmin } = useAuth();
+
+  const navItems = canUseCadeteTools
+    ? [
+        {
+          to: '/',
+          label: 'Mapa Jujuy',
+          icon: 'near_me',
+          badge: null,
+        },
+        {
+          to: '/turnos',
+          label: 'Turnos',
+          icon: 'calendar_clock',
+          badge: '3',
+        },
+        {
+          to: '/calculadora',
+          label: 'Calculadora',
+          icon: 'calculate',
+          badge: null,
+        },
+        {
+          to: '/directorio',
+          label: 'Directorio',
+          icon: 'handyman',
+          badge: null,
+        },
+        ...(isAdmin
+          ? [
+              {
+                to: '/perfil',
+                label: 'Moderador',
+                icon: 'admin_panel_settings',
+                badge: null,
+              },
+            ]
+          : []),
+      ]
+    : [
+        {
+          to: '/',
+          label: 'Mapa Jujuy',
+          icon: 'near_me',
+          badge: null,
+        },
+        {
+          to: '/directorio',
+          label: 'Directorio',
+          icon: 'handyman',
+          badge: null,
+        },
+        {
+          to: '/perfil',
+          label: 'Soy Cadete',
+          icon: 'verified_user',
+          badge: null,
+        },
+      ];
 
   return (
     <nav className="fixed bottom-0 w-full z-50 pb-safe bg-surface/95 backdrop-blur-xl border-t border-surface-container shadow-[0_-2px_12px_rgba(21,28,39,0.06)]">

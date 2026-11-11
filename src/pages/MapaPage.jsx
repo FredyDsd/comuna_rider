@@ -94,7 +94,7 @@ function decodeWmoWeather(code) {
 
 export default function MapaPage() {
   const navigate = useNavigate();
-  const { user, profile, canWriteMapAndShifts, isAdmin } = useAuth();
+  const { user, profile, canWriteMap, canUseCadeteTools, isAdmin } = useAuth();
 
   const [selectedZone, setSelectedZone] = useState('Centro y Barrios');
   const [selectedSubzone, setSelectedSubzone] = useState('Microcentro');
@@ -273,10 +273,10 @@ export default function MapaPage() {
   }, [isWeatherExpanded, resetWeatherIdleTimer]);
 
   const handleStartAddAlert = () => {
-    if (!canWriteMapAndShifts) {
+    if (!canWriteMap) {
       if (
         window.confirm(
-          '🔒 Acción restringida (Nivel 1: Visitante).\nSolo los Cadetes Verificados pueden agregar alertas al mapa. ¿Querés ir a Mi Perfil para iniciar sesión o registrarte?'
+          '🔒 Para aportar alertas al mapa comunitario necesitás iniciar sesión o crear tu cuenta gratuita (Nivel 1: Ciudadano o Cadete). ¿Querés ir a Mi Perfil?'
         )
       ) {
         navigate('/perfil');
@@ -300,14 +300,18 @@ export default function MapaPage() {
   };
 
   const handlePublishAlert = async () => {
-    if (!canWriteMapAndShifts || !user) {
+    if (!canWriteMap || !user) {
       navigate('/perfil');
       return;
     }
 
     setSavingAlert(true);
-    const authorName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Verificado';
-    const vehicle = profile?.vehicle || 'Moto';
+    const authorName =
+      profile?.full_name ||
+      user.email?.split('@')[0] ||
+      (canUseCadeteTools ? 'Cadete Verificado' : 'Vecino Jujuy');
+    const authorRoleLabel = canUseCadeteTools ? 'Cadete' : 'Vecino';
+    const vehicle = canUseCadeteTools ? profile?.vehicle || 'Moto' : 'Ciudadano';
     const defaultZoneCoords =
       selectedSubzoneCoords || JUJUY_ZONES_COORDS[selectedZone] || [-24.1858, -65.2995];
     const finalLat = pickedCoords?.lat ?? defaultZoneCoords[0];
@@ -343,12 +347,12 @@ export default function MapaPage() {
       category: reportCategory === 'gomeria' ? 'gruas' : reportCategory,
       badge: presetConfig.badge,
       title: reportTitle.trim() || `Alerta en ${selectedZone}`,
-      description: `${reportDesc.trim()} Reportado por ${authorName} (${vehicle}).`,
+      description: `${reportDesc.trim()} Reportado por ${authorRoleLabel}: ${authorName}.`,
       zone: selectedZone,
       lat: finalLat,
       lng: finalLng,
       confirm_count: 1,
-      verified: true,
+      verified: canUseCadeteTools,
     };
 
     try {
@@ -371,8 +375,8 @@ export default function MapaPage() {
             title: data.title,
             desc: data.description,
             confirmCount: data.confirm_count,
-            verified: true,
-            author: `Cadete: ${authorName}`,
+            verified: Boolean(data.verified),
+            author: `${authorRoleLabel}: ${authorName}`,
             category: data.category,
             zone: data.zone,
             lat: data.lat,
@@ -391,8 +395,8 @@ export default function MapaPage() {
           title: newDbRow.title,
           desc: newDbRow.description,
           confirmCount: 1,
-          verified: true,
-          author: `Cadete: ${authorName}`,
+          verified: canUseCadeteTools,
+          author: `${authorRoleLabel}: ${authorName}`,
           category: newDbRow.category,
           zone: newDbRow.zone,
           lat: finalLat,
@@ -425,10 +429,10 @@ export default function MapaPage() {
   };
 
   const handleConfirm = async (alertItem) => {
-    if (!canWriteMapAndShifts) {
+    if (!canWriteMap) {
       if (
         window.confirm(
-          'Iniciá sesión como Cadete Verificado para confirmar alertas en vivo. ¿Ir a Mi Perfil?'
+          'Iniciá sesión (Nivel 1 Ciudadano o Cadete) para confirmar alertas en vivo. ¿Ir a Mi Perfil?'
         )
       ) {
         navigate('/perfil');
@@ -705,10 +709,10 @@ export default function MapaPage() {
               isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
             }`}
           >
-            {!canWriteMapAndShifts ? 'lock' : isPlacingPin ? 'open_with' : 'add_location_alt'}
+            {!canWriteMap ? 'lock' : isPlacingPin ? 'open_with' : 'add_location_alt'}
           </span>
           <span className="font-label-lg text-label-lg">
-            {!canWriteMapAndShifts
+            {!canWriteMap
               ? 'Iniciar Sesión para Agregar Alerta'
               : isPlacingPin
               ? 'Arrastrá el Pin en el Mapa (Cancelar)'

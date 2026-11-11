@@ -10,17 +10,21 @@ create extension if not exists "pgcrypto";
 -- ============================================================================
 -- 1. TABLA: profiles (Roles de USUARIOS.md)
 -- Niveles:
---   Nivel 1 (No registrado): 'visitante' (solo lectura, sin fila o anónimo)
---   Nivel 2 (Registrado base): 'cadete_verificado' (escribe alertas y turnos)
---   Nivel 3 (Vendedor): 'cadete_emprendedor' (publica en Mercado Cadete)
---   Nivel 4 (Dueño/Mod): 'admin' (modera alertas, turnos, mercado y usuarios)
+--   Nivel 1 (Ciudadano base): 'ciudadano' (ve/usa Mapa y Directorio; solicita alta)
+--   Nivel 2 (Cadete Verificado): 'cadete_verificado' (ve Turnos, Calculadora, Mapa, Directorio)
+--   Nivel 3 (Emprendedor): 'cadete_emprendedor' (publica en Mercado Cadete)
+--   Nivel 4 (Moderador WhatsApp): 'admin' (aprueba solicitudes Nivel 2, borra alertas y banea)
 -- ============================================================================
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
-  full_name text not null default 'Cadete Jujuy',
-  role text not null default 'cadete_verificado'
-    check (role in ('visitante', 'cadete_verificado', 'cadete_emprendedor', 'admin')),
+  full_name text not null default 'Vecino Jujuy',
+  role text not null default 'ciudadano'
+    check (role in ('ciudadano', 'visitante', 'cadete_verificado', 'cadete_emprendedor', 'admin')),
+  whatsapp text,
+  verification_status text not null default 'none'
+    check (verification_status in ('none', 'pending', 'approved', 'rejected')),
+  verification_requested_at timestamptz,
   vehicle text not null default 'Moto'
     check (vehicle in ('Moto', 'Bici')),
   zone text not null default 'Centro',
@@ -66,7 +70,7 @@ create policy "Usuario o admin puede actualizar perfil"
     )
   );
 
--- Trigger automático para crear perfil Nivel 2 ('cadete_verificado') al registrarse en Supabase Auth
+-- Trigger automático para crear perfil Nivel 1 ('ciudadano') al registrarse en Supabase Auth
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -77,8 +81,8 @@ begin
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1), 'Cadete Jujuy'),
-    coalesce(new.raw_user_meta_data->>'role', 'cadete_verificado'),
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1), 'Vecino Jujuy'),
+    'ciudadano',
     coalesce(new.raw_user_meta_data->>'vehicle', 'Moto'),
     coalesce(new.raw_user_meta_data->>'zone', 'Centro')
   )
@@ -126,9 +130,10 @@ create policy "Alertas visibles para todos (incluyendo visitantes)"
   on public.alerts for select
   using (true);
 
--- Solo usuarios autenticados Nivel 2+ no baneados pueden crear alertas con su user_id
+-- Usuarios autenticados no baneados (Nivel 1 Ciudadano + Cadetes + Moderadores) pueden crear alertas
 drop policy if exists "Solo cadetes verificados crean alertas" on public.alerts;
-create policy "Solo cadetes verificados crean alertas"
+drop policy if exists "Usuarios registrados no baneados crean alertas" on public.alerts;
+create policy "Usuarios registrados no baneados crean alertas"
   on public.alerts for insert
   to authenticated
   with check (
@@ -137,7 +142,7 @@ create policy "Solo cadetes verificados crean alertas"
       select 1 from public.profiles p
       where p.id = auth.uid()
         and p.is_banned = false
-        and p.role in ('cadete_verificado', 'cadete_emprendedor', 'admin')
+        and p.role in ('ciudadano', 'visitante', 'cadete_verificado', 'cadete_emprendedor', 'admin')
     )
   );
 
