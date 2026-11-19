@@ -393,6 +393,34 @@ function decodeWmoWeather(code) {
   return { desc: 'Nubosidad Variable', icon: 'cloud' };
 }
 
+function formatArPhone(raw = '') {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return '+54 9 388 ';
+  let digits = trimmed.replace(/\D/g, '');
+  if (!digits) return '+54 9 388 ';
+  if (digits.startsWith('549')) {
+    return `+54 9 ${digits.slice(3)}`.trimEnd();
+  }
+  if (digits.startsWith('54')) {
+    const rest = digits.slice(2).replace(/^9/, '');
+    return `+54 9 ${rest}`.trimEnd();
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return `+54 9 ${digits}`;
+}
+
+function hasRegisteredPhone(raw = '') {
+  const digits = (raw || '').replace(/\D/g, '');
+  const local = digits.startsWith('549')
+    ? digits.slice(3)
+    : digits.startsWith('54')
+    ? digits.slice(2)
+    : digits;
+  return local.length >= 8;
+}
+
 const CLIENT_TAGS = [
   '🏢 Exige subir al depto',
   '📍 Vive 1 cuadra más arriba',
@@ -455,7 +483,7 @@ const SOS_OPTIONS = [
 
 export default function MapaPage() {
   const navigate = useNavigate();
-  const { user, profile, canWriteMap, canUseCadeteTools, isAdmin } = useAuth();
+  const { user, profile, canWriteMap, canUseCadeteTools, isAdmin, updateProfile } = useAuth();
 
   const [selectedZone, setSelectedZone] = useState('Centro y Barrios');
   const [selectedSubzone, setSelectedSubzone] = useState('Microcentro');
@@ -513,7 +541,8 @@ export default function MapaPage() {
   const [isSosModalOpen, setIsSosModalOpen] = useState(false);
   const [selectedSosOption, setSelectedSosOption] = useState(SOS_OPTIONS[2]); // default pinchadura
   const [sosNote, setSosNote] = useState('');
-  const [sosPhone, setSosPhone] = useState('');
+  const [sosPhone, setSosPhone] = useState('+54 9 388 ');
+  const [isEditingSosPhone, setIsEditingSosPhone] = useState(false);
   const [sosCoords, setSosCoords] = useState(null);
   const [sosAddress, setSosAddress] = useState('');
   const [gpsStatus, setGpsStatus] = useState('idle'); // 'idle' | 'locating' | 'ready' | 'manual' | 'error'
@@ -540,10 +569,10 @@ export default function MapaPage() {
   });
 
   useEffect(() => {
-    if (profile?.whatsapp && !sosPhone) {
-      setSosPhone(profile.whatsapp);
+    if (hasRegisteredPhone(profile?.whatsapp)) {
+      setSosPhone(formatArPhone(profile.whatsapp));
     }
-  }, [profile?.whatsapp, sosPhone]);
+  }, [profile?.whatsapp]);
 
   // Si un usuario baja de nivel a N1 y estaba viendo Clientes o SOS, lo pasamos a Controles
   useEffect(() => {
@@ -1333,7 +1362,10 @@ export default function MapaPage() {
 
   const handleOpenSosModal = () => {
     if (!canUseCadeteTools) return;
-    setSosPhone(profile?.whatsapp || '');
+    const savedWa = profile?.whatsapp || '';
+    const hasSaved = hasRegisteredPhone(savedWa);
+    setSosPhone(hasSaved ? formatArPhone(savedWa) : '+54 9 388 ');
+    setIsEditingSosPhone(!hasSaved);
     setSosNote('');
     setLastSentSos(null);
     setIsPickingSosOnMap(false);
@@ -1375,7 +1407,21 @@ export default function MapaPage() {
     const finalLng = resolvedCoords?.lng ?? fallbackCoords[1];
     const isRealGps = Boolean(resolvedCoords);
     const expiresAt = Date.now() + TTL_BY_SUBTYPE.sos;
-    const phoneToShare = sosPhone.trim() || profile?.whatsapp || '';
+
+    const candidatePhone = hasRegisteredPhone(sosPhone)
+      ? formatArPhone(sosPhone)
+      : hasRegisteredPhone(profile?.whatsapp)
+      ? formatArPhone(profile.whatsapp)
+      : '';
+    const phoneToShare = candidatePhone;
+
+    // Si completó/actualizó su teléfono en este SOS y no lo tenía registrado en Supabase, lo guarda en su perfil
+    if (
+      phoneToShare &&
+      (!hasRegisteredPhone(profile?.whatsapp) || formatArPhone(profile?.whatsapp) !== phoneToShare)
+    ) {
+      updateProfile({ whatsapp: phoneToShare }).catch(() => {});
+    }
 
     const extraObj = {
       subType: 'sos',
@@ -2644,13 +2690,50 @@ export default function MapaPage() {
                     </button>
                   </div>
 
-                  <input
-                    type="tel"
-                    value={sosPhone}
-                    onChange={(e) => setSosPhone(e.target.value)}
-                    placeholder="Tu teléfono/WhatsApp para que te ubiquen (+54 9 388...)"
-                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none"
-                  />
+                  {hasRegisteredPhone(sosPhone) && !isEditingSosPhone ? (
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-tertiary-container/15 border border-tertiary/30 text-[12px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="material-symbols-outlined text-base text-tertiary">
+                          verified
+                        </span>
+                        <span className="font-bold text-on-surface truncate">
+                          WhatsApp registrado: <strong className="text-tertiary">{sosPhone}</strong>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingSosPhone(true)}
+                        className="text-primary font-label-sm text-label-sm font-extrabold underline flex-shrink-0 ml-2"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between px-0.5">
+                        <label className="font-label-sm text-[10px] uppercase text-secondary font-bold">
+                          Tu WhatsApp (+54 9 prellenado • se guarda en tu perfil)
+                        </label>
+                        {!sosPhone.startsWith('+54 9') && (
+                          <button
+                            type="button"
+                            onClick={() => setSosPhone(formatArPhone(sosPhone))}
+                            className="font-label-sm text-[10px] text-primary font-extrabold underline"
+                          >
+                            Aplicar +54 9
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="tel"
+                        value={sosPhone}
+                        onChange={(e) => setSosPhone(e.target.value)}
+                        onBlur={() => setSosPhone((prev) => formatArPhone(prev))}
+                        placeholder="+54 9 388 4123456"
+                        className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none border border-surface-container-high"
+                      />
+                    </div>
+                  )}
 
                   <input
                     type="text"
