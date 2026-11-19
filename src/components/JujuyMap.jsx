@@ -87,8 +87,12 @@ export const JUJUY_ZONES_COORDS = {
 function createPinIcon(type = 'critical', isTemp = false) {
   const colors = {
     critical: '#ea0029',
+    controles: '#ea0029',
     warning: '#f59e0b',
     weather: '#0284c7',
+    calles: '#0284c7',
+    gomerias: '#00b67a',
+    clientes: '#7c3aed',
     security: '#4f46e5',
     sos: '#dc2626',
     temp: '#151c27',
@@ -96,15 +100,21 @@ function createPinIcon(type = 'critical', isTemp = false) {
   const bg = isTemp ? colors.temp : colors[type] || colors.critical;
   const emoji = isTemp
     ? '📍'
-    : type === 'critical'
+    : type === 'critical' || type === 'controles'
     ? '🚓'
-    : type === 'weather'
-    ? '🌊'
+    : type === 'weather' || type === 'calles'
+    ? '🚧'
+    : type === 'gomerias'
+    ? '🔧'
+    : type === 'clientes'
+    ? '📋'
     : type === 'warning'
     ? '⚠️'
     : type === 'sos'
     ? '🚨'
     : '🛡️';
+
+  const isSos = !isTemp && type === 'sos';
 
   return L.divIcon({
     className: 'custom-jujuy-pin',
@@ -129,22 +139,102 @@ function createPinIcon(type = 'critical', isTemp = false) {
           ">📍</div>
         </div>`
       : `<div style="
-          width: 36px;
-          height: 36px;
+          width: ${isSos ? '40px' : '36px'};
+          height: ${isSos ? '40px' : '36px'};
           border-radius: 9999px;
           background: ${bg};
           color: #fff;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 16px;
+          font-size: ${isSos ? '18px' : '16px'};
           border: 2.5px solid #ffffff;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.32);
+          box-shadow: ${
+            isSos
+              ? '0 0 0 6px rgba(220,38,38,0.32), 0 4px 12px rgba(220,38,38,0.55)'
+              : '0 4px 10px rgba(0,0,0,0.32)'
+          };
         ">${emoji}</div>`,
-    iconSize: isTemp ? [130, 66] : [36, 36],
-    iconAnchor: isTemp ? [65, 60] : [18, 36],
+    iconSize: isTemp ? [130, 66] : isSos ? [40, 40] : [36, 36],
+    iconAnchor: isTemp ? [65, 60] : isSos ? [20, 40] : [18, 36],
     popupAnchor: [0, -34],
   });
+}
+
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildPinPopupHtml(item) {
+  const badgeColor =
+    item.type === 'gomerias'
+      ? '#00b67a'
+      : item.type === 'clientes'
+      ? '#7c3aed'
+      : item.type === 'calles' || item.type === 'weather'
+      ? '#0284c7'
+      : '#ea0029';
+
+  if (item.type === 'gomerias') {
+    const cleanPhone = (item.phone || '').replace(/\D/g, '');
+    return `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 190px;">
+      <div style="font-size: 10px; font-weight: 800; color: ${badgeColor}; text-transform: uppercase;">${escapeHtml(item.badge || 'Gomería / Taller')}</div>
+      <div style="font-size: 13px; font-weight: 800; color: #151c27; margin-top: 2px;">${escapeHtml(item.title)}</div>
+      <div style="font-size: 11px; color: #575e70; margin-top: 3px;">${escapeHtml(item.address || item.desc)}</div>
+      <div style="font-size: 11px; font-weight: 700; color: #151c27; margin-top: 4px;">🕒 ${escapeHtml(item.hours || 'Consultar horario')}</div>
+      ${
+        cleanPhone
+          ? `<div style="margin-top: 6px; display: flex; gap: 6px;">
+              <a href="tel:${escapeHtml(item.phone)}" style="font-size: 11px; font-weight: 800; color: #00b67a; text-decoration: none;">📞 Llamar</a>
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                `${item.title} ${item.address || ''} Jujuy`
+              )}" target="_blank" rel="noopener noreferrer" style="font-size: 11px; font-weight: 800; color: #0284c7; text-decoration: none;">🗺️ Maps</a>
+            </div>`
+          : ''
+      }
+    </div>`;
+  }
+
+  if (item.type === 'clientes') {
+    const lastComment =
+      Array.isArray(item.comments) && item.comments.length > 0
+        ? item.comments[item.comments.length - 1]
+        : null;
+    return `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 195px;">
+      <div style="font-size: 10px; font-weight: 800; color: ${badgeColor}; text-transform: uppercase;">${escapeHtml(item.tag || item.badge || 'Historial')} • ${item.reportsCount ?? item.confirmCount ?? 1} reportes</div>
+      <div style="font-size: 13px; font-weight: 800; color: #151c27; margin-top: 2px;">${escapeHtml(item.title)}</div>
+      <div style="font-size: 11px; color: #575e70; margin-top: 4px;">${
+        lastComment
+          ? `<strong>${escapeHtml(lastComment.author)}:</strong> ${escapeHtml(lastComment.text)}`
+          : escapeHtml(item.desc)
+      }</div>
+    </div>`;
+  }
+
+  if (item.type === 'sos') {
+    const cleanPhone = (item.phone || '').replace(/\D/g, '');
+    return `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 195px;">
+      <div style="font-size: 10px; font-weight: 800; color: #dc2626; text-transform: uppercase;">🚨 ${escapeHtml(item.badge || 'SOS Auxilio')} • ${escapeHtml(item.time || '')}</div>
+      <div style="font-size: 13px; font-weight: 800; color: #151c27; margin-top: 2px;">${escapeHtml(item.title)}</div>
+      <div style="font-size: 11px; color: #575e70; margin-top: 3px;">${escapeHtml(item.desc)}</div>
+      ${
+        cleanPhone
+          ? `<div style="margin-top: 6px; font-size: 11px; font-weight: 800; color: #151c27;">📱 Tel: ${escapeHtml(item.phone)}</div>`
+          : ''
+      }
+    </div>`;
+  }
+
+  return `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 175px;">
+    <div style="font-size: 10px; font-weight: 800; color: ${badgeColor}; text-transform: uppercase;">${escapeHtml(item.badge)}</div>
+    <div style="font-size: 13px; font-weight: 700; color: #151c27; margin-top: 2px;">${escapeHtml(item.title)}</div>
+    <div style="font-size: 11px; color: #575e70; margin-top: 4px;">${escapeHtml(item.desc)}</div>
+  </div>`;
 }
 
 export default function JujuyMap({
@@ -154,16 +244,22 @@ export default function JujuyMap({
   isPlacingPin = false,
   onPinPlaced,
   onCancelPlacing,
+  onSelectPin,
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
   const tempMarkerRef = useRef(null);
   const onPinPlacedRef = useRef(onPinPlaced);
+  const onSelectPinRef = useRef(onSelectPin);
 
   useEffect(() => {
     onPinPlacedRef.current = onPinPlaced;
   }, [onPinPlaced]);
+
+  useEffect(() => {
+    onSelectPinRef.current = onSelectPin;
+  }, [onSelectPin]);
 
   // Inicializar mapa Leaflet a pantalla completa al fondo con bloqueo fuera de Jujuy / Palpalá
   useEffect(() => {
@@ -233,17 +329,17 @@ export default function JujuyMap({
 
     alerts.forEach((a) => {
       if (typeof a.lat !== 'number' || typeof a.lng !== 'number') return;
+      const pinType = a.mapPinType || a.type || 'critical';
       const marker = L.marker([a.lat, a.lng], {
-        icon: createPinIcon(a.type, false),
+        icon: createPinIcon(pinType, false),
       });
 
-      marker.bindPopup(
-        `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 175px;">
-          <div style="font-size: 10px; font-weight: 800; color: #ea0029; text-transform: uppercase;">${a.badge}</div>
-          <div style="font-size: 13px; font-weight: 700; color: #151c27; margin-top: 2px;">${a.title}</div>
-          <div style="font-size: 11px; color: #575e70; margin-top: 4px;">${a.desc}</div>
-        </div>`
-      );
+      marker.bindPopup(buildPinPopupHtml(a));
+      marker.on('click', () => {
+        if (onSelectPinRef.current) {
+          onSelectPinRef.current(a);
+        }
+      });
 
       marker.addTo(layer);
     });
