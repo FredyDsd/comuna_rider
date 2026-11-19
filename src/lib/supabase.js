@@ -19,10 +19,10 @@ const rawKey = storedKey || envKey || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = Boolean(
   rawUrl &&
-    rawKey &&
-    rawUrl.startsWith('https://') &&
-    !rawUrl.includes('TU_PROYECTO') &&
-    rawKey !== 'tu_anon_key_aqui'
+  rawKey &&
+  rawUrl.startsWith('https://') &&
+  !rawUrl.includes('TU_PROYECTO') &&
+  rawKey !== 'tu_anon_key_aqui'
 );
 
 const finalUrl = isSupabaseConfigured ? rawUrl : 'https://placeholder-jujuy-rider.supabase.co';
