@@ -92,6 +92,8 @@ function decodeWmoWeather(code) {
   return { desc: 'Nubosidad Variable', icon: 'cloud' };
 }
 
+const SHEET_COLLAPSED_PX = 122;
+
 export default function MapaPage() {
   const navigate = useNavigate();
   const { user, profile, canWriteMap, canUseCadeteTools, isAdmin } = useAuth();
@@ -107,6 +109,18 @@ export default function MapaPage() {
   const [pickedCoords, setPickedCoords] = useState(null);
   const [isPlacingPin, setIsPlacingPin] = useState(false);
   const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
+
+  // Estado del Bottom Sheet deslizable (inicia colapsado abajo para dejar el mapa libre al fondo)
+  const containerRef = useRef(null);
+  const [sheetHeightPx, setSheetHeightPx] = useState(SHEET_COLLAPSED_PX);
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const sheetDragRef = useRef({
+    active: false,
+    startY: 0,
+    startHeight: SHEET_COLLAPSED_PX,
+    moved: false,
+  });
+
   const hourlyScrollRef = useRef(null);
   const weatherIdleTimerRef = useRef(null);
   const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
@@ -133,6 +147,93 @@ export default function MapaPage() {
   const macroZonesList = Object.values(JUJUY_MACRO_ZONES);
   const currentMacroZone =
     JUJUY_MACRO_ZONES[selectedZone] || JUJUY_MACRO_ZONES['Centro y Barrios'];
+
+  const getMaxSheetHeight = useCallback(() => {
+    const h = containerRef.current?.clientHeight || window.innerHeight - 128;
+    return Math.max(320, Math.round(h * 0.84));
+  }, []);
+
+  const getHalfSheetHeight = useCallback(() => {
+    const h = containerRef.current?.clientHeight || window.innerHeight - 128;
+    return Math.max(240, Math.round(h * 0.48));
+  }, []);
+
+  // Gestos para subir y bajar la barra inferior a voluntad del usuario
+  const handleSheetPointerStart = (clientY) => {
+    sheetDragRef.current = {
+      active: true,
+      startY: clientY,
+      startHeight: sheetHeightPx,
+      moved: false,
+    };
+    setIsDraggingSheet(true);
+  };
+
+  const handleSheetPointerMove = useCallback(
+    (clientY) => {
+      if (!sheetDragRef.current.active) return;
+      const deltaY = sheetDragRef.current.startY - clientY;
+      if (Math.abs(deltaY) > 5) {
+        sheetDragRef.current.moved = true;
+      }
+      const maxH = getMaxSheetHeight();
+      const nextHeight = Math.min(
+        maxH,
+        Math.max(SHEET_COLLAPSED_PX, sheetDragRef.current.startHeight + deltaY)
+      );
+      setSheetHeightPx(nextHeight);
+    },
+    [getMaxSheetHeight]
+  );
+
+  const handleSheetPointerEnd = useCallback(() => {
+    if (!sheetDragRef.current.active) return;
+    const wasMoved = sheetDragRef.current.moved;
+    const startH = sheetDragRef.current.startHeight;
+    sheetDragRef.current.active = false;
+    setIsDraggingSheet(false);
+
+    const maxH = getMaxSheetHeight();
+    const halfH = getHalfSheetHeight();
+
+    // Si solo hizo tap en la manija sin arrastrar, alterna entre colapsado -> medio -> extendido
+    if (!wasMoved) {
+      if (startH <= SHEET_COLLAPSED_PX + 20) {
+        setSheetHeightPx(halfH);
+      } else if (startH < maxH - 40) {
+        setSheetHeightPx(maxH);
+      } else {
+        setSheetHeightPx(SHEET_COLLAPSED_PX);
+      }
+      return;
+    }
+
+    // Si arrastró bastante o soltó cerca de un extremo, acomoda suavemente pero respetando la dirección
+    setSheetHeightPx((currentH) => {
+      const delta = currentH - startH;
+      if (delta > 45) {
+        return currentH > halfH + 30 ? maxH : halfH;
+      }
+      if (delta < -45) {
+        return currentH < halfH - 20 ? SHEET_COLLAPSED_PX : halfH;
+      }
+      // Si lo movió poquito, lo deja donde el usuario lo soltó (o colapsa si está muy abajo)
+      if (currentH < SHEET_COLLAPSED_PX + 35) return SHEET_COLLAPSED_PX;
+      return currentH;
+    });
+  }, [getHalfSheetHeight, getMaxSheetHeight]);
+
+  useEffect(() => {
+    if (!isDraggingSheet) return;
+    const onMouseMove = (e) => handleSheetPointerMove(e.clientY);
+    const onMouseUp = () => handleSheetPointerEnd();
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isDraggingSheet, handleSheetPointerMove, handleSheetPointerEnd]);
 
   const handleSelectMacroZone = (zoneId) => {
     setSelectedZone(zoneId);
@@ -283,7 +384,9 @@ export default function MapaPage() {
       }
       return;
     }
-    // Si ya estaba en modo ubicar pin, lo cancela; si no, activa el pin arrastrable
+    // Baja el cajón inferior automáticamente para despejar todo el mapa al arrastrar el pin
+    setSheetHeightPx(SHEET_COLLAPSED_PX);
+    setIsWeatherExpanded(false);
     setIsPlacingPin((prev) => !prev);
   };
 
@@ -455,312 +558,361 @@ export default function MapaPage() {
     }
   };
 
+  const handleFocusAlertOnMap = (alertItem) => {
+    if (typeof alertItem.lat === 'number' && typeof alertItem.lng === 'number') {
+      setSelectedSubzoneCoords([alertItem.lat, alertItem.lng]);
+      setSheetHeightPx(SHEET_COLLAPSED_PX);
+    }
+  };
+
   const filteredAlerts = alerts.filter((a) => {
     if (activeFilter === 'all') return true;
     return a.category === activeFilter;
   });
 
+  const isSheetCollapsed = sheetHeightPx <= SHEET_COLLAPSED_PX + 24;
+
   return (
-    <div className="flex flex-col w-full pb-6 space-y-3 pt-1.5">
-      {/* Sub-banner Compacto: Muestra las 3 Zonas o los Sub-barrios en la misma fila sin agrandar la caja */}
-      <div className="relative overflow-hidden rounded-xl bg-primary-container text-on-primary-container p-3 shadow-md">
-        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
-        <div className="relative z-10 flex flex-col space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md">
-              <span className="w-2 h-2 rounded-full bg-tertiary-fixed animate-ping"></span>
-              <span className="font-label-sm text-label-sm text-on-primary-container tracking-wider uppercase font-extrabold">
-                {isShowingSubzones ? `Zona: ${selectedZone}` : 'Radar Comunitario • 3 Zonas'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-on-primary-container/90">
-              <span className="material-symbols-outlined text-sm">wifi_tethering</span>
-              <span className="font-label-sm text-label-sm">En Vivo</span>
-            </div>
-          </div>
-
-          {/* Única fila intercambiable (altura fija h-9 para no expandir la tarjeta) */}
-          <div className="h-9 flex items-center">
-            {!isShowingSubzones ? (
-              <div className="grid grid-cols-3 gap-1.5 w-full">
-                {macroZonesList.map((zone) => {
-                  const isSelected = selectedZone === zone.id;
-                  return (
-                    <button
-                      key={zone.id}
-                      type="button"
-                      onClick={() => handleSelectMacroZone(zone.id)}
-                      className={`h-9 px-2 rounded-xl font-label-md text-label-md transition-all flex items-center justify-center gap-1 text-center active:scale-95 ${
-                        isSelected
-                          ? 'bg-surface-container-lowest text-primary shadow-sm font-extrabold'
-                          : 'bg-white/15 text-on-primary-container hover:bg-white/25 font-bold'
-                      }`}
-                    >
-                      {isSelected && (
-                        <span
-                          className="material-symbols-outlined text-xs"
-                          style={{ fontVariationSettings: "'FILL' 1" }}
-                        >
-                          my_location
-                        </span>
-                      )}
-                      <span className="truncate">{zone.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 w-full overflow-x-auto no-scrollbar">
-                {/* Botón fijo para volver a elegir cualquiera de las 3 zonas */}
-                <button
-                  type="button"
-                  onClick={() => setIsShowingSubzones(false)}
-                  className="flex-shrink-0 h-8 px-2.5 rounded-full bg-surface-container-lowest text-primary font-label-sm text-label-sm font-extrabold flex items-center gap-1 shadow-xs active:scale-95"
-                  title="Volver a las 3 zonas"
-                >
-                  <span className="material-symbols-outlined text-sm">arrow_back</span>
-                  <span>Zonas</span>
-                </button>
-
-                {/* Sub-barrios en el mismo lugar */}
-                {currentMacroZone.subzones.map((sub) => {
-                  const isSubActive = selectedSubzone === sub.name && selectedSubzoneCoords !== null;
-                  return (
-                    <button
-                      key={sub.name}
-                      type="button"
-                      onClick={() => handleSelectSubzone(sub)}
-                      className={`flex-shrink-0 h-8 px-2.5 rounded-full font-label-sm text-label-sm transition-colors flex items-center gap-1 active:scale-95 ${
-                        isSubActive
-                          ? 'bg-tertiary-fixed text-on-tertiary-fixed font-extrabold shadow-xs'
-                          : 'bg-black/25 text-on-primary-container hover:bg-black/35 font-bold'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-xs">pin_drop</span>
-                      {sub.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+    <div
+      ref={containerRef}
+      className="relative w-full h-[calc(100dvh-8rem)] overflow-hidden bg-surface select-none"
+    >
+      {/* 1. MAPA INTERACTIVO AL FONDO (Ocupa toda la pantalla entre Header y BottomNav) */}
+      <div className="absolute inset-0 z-10">
+        <JujuyMap
+          selectedZone={selectedZone}
+          selectedSubzoneCoords={selectedSubzoneCoords}
+          alerts={alerts}
+          isPlacingPin={isPlacingPin}
+          onPinPlaced={handlePinPlaced}
+          onCancelPlacing={() => setIsPlacingPin(false)}
+        />
       </div>
 
-      {/* Widget de Clima en Vivo (Solo la parte superior abre/cierra; las tarjetas inferiores se deslizan libremente) */}
-      <div className="bg-surface-container-lowest rounded-xl p-3 shadow-sm flex flex-col gap-2.5 border border-surface-container/50 select-none transition-all duration-200 hover:border-primary/30">
-        {/* Parte superior: único disparador para desplegar o replegar */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setIsWeatherExpanded((prev) => !prev)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setIsWeatherExpanded((prev) => !prev);
-            }
-          }}
-          className="flex items-center justify-between gap-2.5 cursor-pointer"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0">
-              <span
-                className="material-symbols-outlined text-xl text-primary"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                {weather.icon}
-              </span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
-                  {weather.desc} • {weather.temp}°C
-                </span>
-                <span className="px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-[10px] font-extrabold flex-shrink-0">
-                  {weather.source}
+      {/* 2. HUD SUPERIOR FLOTANTE SOBRE EL MAPA (Selector de 3 Zonas + Cápsula de Clima SMN) */}
+      <div className="absolute top-2.5 left-3 right-3 z-20 flex flex-col gap-2 pointer-events-none">
+        {/* Selector Compacto de 3 Zonas / Sub-barrios (sin agrandar altura) */}
+        <div className="pointer-events-auto relative overflow-hidden rounded-2xl bg-primary-container/95 backdrop-blur-md text-on-primary-container p-2.5 shadow-lg border border-white/15">
+          <div className="relative z-10 flex flex-col space-y-1.5">
+            <div className="flex items-center justify-between px-0.5">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-tertiary-fixed animate-ping"></span>
+                <span className="font-label-sm text-[10px] text-on-primary-container tracking-wider uppercase font-extrabold">
+                  {isShowingSubzones ? `Zona: ${selectedZone}` : 'Radar Jujuy • 3 Zonas'}
                 </span>
               </div>
-              <p className="font-body-sm text-body-sm text-secondary truncate">
-                Humedad {weather.humidity}% • Viento {weather.wind} km/h • {selectedSubzone}
-              </p>
+              <div className="flex items-center gap-1 text-on-primary-container/90">
+                <span className="material-symbols-outlined text-xs">wifi_tethering</span>
+                <span className="font-label-sm text-[10px] font-bold">En Vivo</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="flex flex-col items-end">
-              <span className="font-label-lg text-label-lg text-on-surface font-extrabold tracking-tight">
-                ST {weather.feelsLike}°C
-              </span>
-              <span className="font-label-sm text-label-sm text-secondary">
-                🌧️ {weather.rainProb}% lluvia
-              </span>
+
+            {/* Única fila intercambiable (altura fija h-8) */}
+            <div className="h-8 flex items-center">
+              {!isShowingSubzones ? (
+                <div className="grid grid-cols-3 gap-1.5 w-full">
+                  {macroZonesList.map((zone) => {
+                    const isSelected = selectedZone === zone.id;
+                    return (
+                      <button
+                        key={zone.id}
+                        type="button"
+                        onClick={() => handleSelectMacroZone(zone.id)}
+                        className={`h-8 px-2 rounded-xl font-label-sm text-label-sm transition-all flex items-center justify-center gap-1 text-center active:scale-95 ${
+                          isSelected
+                            ? 'bg-surface-container-lowest text-primary shadow-sm font-extrabold'
+                            : 'bg-white/15 text-on-primary-container hover:bg-white/25 font-bold'
+                        }`}
+                      >
+                        {isSelected && (
+                          <span
+                            className="material-symbols-outlined text-xs"
+                            style={{ fontVariationSettings: "'FILL' 1" }}
+                          >
+                            my_location
+                          </span>
+                        )}
+                        <span className="truncate">{zone.shortLabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 w-full overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setIsShowingSubzones(false)}
+                    className="flex-shrink-0 h-7 px-2.5 rounded-full bg-surface-container-lowest text-primary font-label-sm text-label-sm font-extrabold flex items-center gap-1 shadow-xs active:scale-95"
+                    title="Volver a las 3 zonas"
+                  >
+                    <span className="material-symbols-outlined text-xs">arrow_back</span>
+                    <span>Zonas</span>
+                  </button>
+
+                  {currentMacroZone.subzones.map((sub) => {
+                    const isSubActive =
+                      selectedSubzone === sub.name && selectedSubzoneCoords !== null;
+                    return (
+                      <button
+                        key={sub.name}
+                        type="button"
+                        onClick={() => handleSelectSubzone(sub)}
+                        className={`flex-shrink-0 h-7 px-2.5 rounded-full font-label-sm text-label-sm transition-colors flex items-center gap-1 active:scale-95 ${
+                          isSubActive
+                            ? 'bg-tertiary-fixed text-on-tertiary-fixed font-extrabold shadow-xs'
+                            : 'bg-black/25 text-on-primary-container hover:bg-black/35 font-bold'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-xs">pin_drop</span>
+                        {sub.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <span className="material-symbols-outlined text-secondary text-lg">
-              {isWeatherExpanded ? 'expand_less' : 'expand_more'}
-            </span>
           </div>
         </div>
 
-        {/* Panel desplegable con pronóstico de las próximas 12 horas (Deslizable a los laterales) */}
-        {isWeatherExpanded && (
-          <div className="pt-2 border-t border-surface-container space-y-2 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between text-secondary">
-              <span className="font-label-sm text-label-sm uppercase tracking-wider font-extrabold text-primary">
-                Próximas 12 Horas ({selectedSubzone})
-              </span>
-              <span className="font-label-sm text-[10px] text-secondary">
-                Deslizá ↔ • Tocá arriba para cerrar
-              </span>
-            </div>
-
-            <div
-              ref={hourlyScrollRef}
-              onScroll={resetWeatherIdleTimer}
-              onTouchStart={resetWeatherIdleTimer}
-              onTouchMove={resetWeatherIdleTimer}
-              onTouchEnd={resetWeatherIdleTimer}
-              onMouseDown={(e) => {
-                resetWeatherIdleTimer();
-                const el = hourlyScrollRef.current;
-                if (!el) return;
-                dragScrollState.current = {
-                  isDown: true,
-                  startX: e.pageX - el.offsetLeft,
-                  scrollLeft: el.scrollLeft,
-                };
-              }}
-              onMouseLeave={() => {
-                dragScrollState.current.isDown = false;
-              }}
-              onMouseUp={() => {
-                resetWeatherIdleTimer();
-                dragScrollState.current.isDown = false;
-              }}
-              onMouseMove={(e) => {
-                resetWeatherIdleTimer();
-                if (!dragScrollState.current.isDown || !hourlyScrollRef.current) return;
+        {/* Cápsula Flotante de Clima en Vivo (Despliega pronóstico de 12hs sobre el mapa) */}
+        <div className="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-lg flex flex-col gap-2 border border-surface-container">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setIsWeatherExpanded((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                const x = e.pageX - hourlyScrollRef.current.offsetLeft;
-                const walk = (x - dragScrollState.current.startX) * 1.4;
-                hourlyScrollRef.current.scrollLeft = dragScrollState.current.scrollLeft - walk;
-              }}
-              className="flex items-stretch gap-2 overflow-x-auto no-scrollbar pb-1 touch-pan-x cursor-grab active:cursor-grabbing"
-            >
-              {weather.hourly.map((h, idx) => (
-                <div
-                  key={`${h.hour}-${idx}`}
-                  className={`flex-shrink-0 min-w-[80px] rounded-lg p-2 flex flex-col items-center gap-1 text-center border ${
-                    idx === 0
-                      ? 'bg-primary-fixed/35 border-primary/30'
-                      : 'bg-surface-container-low border-surface-container'
-                  }`}
+                setIsWeatherExpanded((prev) => !prev);
+              }
+            }}
+            className="flex items-center justify-between gap-2 cursor-pointer"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0">
+                <span
+                  className="material-symbols-outlined text-lg text-primary"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
                 >
-                  <span className="font-label-sm text-label-sm font-extrabold text-on-surface">
-                    {h.hour}
+                  {weather.icon}
+                </span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-label-md text-label-md text-on-surface font-extrabold truncate">
+                    {weather.desc} • {weather.temp}°C
                   </span>
-                  <span
-                    className="material-symbols-outlined text-lg text-primary"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    {h.icon}
-                  </span>
-                  {/* Temperatura */}
-                  <span className="font-label-md text-label-md font-extrabold text-on-surface">
-                    {h.temp}°C
-                  </span>
-                  {/* Precipitación */}
-                  <span className="font-label-sm text-[10px] text-primary font-bold flex items-center gap-0.5">
-                    🌧️ {h.rainProb}% ({h.precipMm}mm)
-                  </span>
-                  {/* Viento */}
-                  <span className="font-label-sm text-[10px] text-secondary font-medium flex items-center gap-0.5">
-                    💨 {h.wind} km/h
+                  <span className="px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface font-label-sm text-[9px] font-extrabold flex-shrink-0">
+                    {weather.source}
                   </span>
                 </div>
-              ))}
+                <p className="font-body-sm text-[11px] text-secondary truncate">
+                  Viento {weather.wind} km/h • 🌧️ {weather.rainProb}% • {selectedSubzone}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="font-label-sm text-label-sm text-on-surface font-extrabold">
+                12h
+              </span>
+              <span className="material-symbols-outlined text-secondary text-base">
+                {isWeatherExpanded ? 'expand_less' : 'expand_more'}
+              </span>
             </div>
           </div>
-        )}
+
+          {isWeatherExpanded && (
+            <div className="pt-1.5 border-t border-surface-container space-y-1.5 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-secondary">
+                <span className="font-label-sm text-[10px] uppercase tracking-wider font-extrabold text-primary">
+                  Próximas 12 Horas ({selectedSubzone})
+                </span>
+                <span className="font-label-sm text-[10px] text-secondary">
+                  Deslizá ↔ • Tocá arriba para cerrar
+                </span>
+              </div>
+
+              <div
+                ref={hourlyScrollRef}
+                onScroll={resetWeatherIdleTimer}
+                onTouchStart={resetWeatherIdleTimer}
+                onTouchMove={resetWeatherIdleTimer}
+                onTouchEnd={resetWeatherIdleTimer}
+                onMouseDown={(e) => {
+                  resetWeatherIdleTimer();
+                  const el = hourlyScrollRef.current;
+                  if (!el) return;
+                  dragScrollState.current = {
+                    isDown: true,
+                    startX: e.pageX - el.offsetLeft,
+                    scrollLeft: el.scrollLeft,
+                  };
+                }}
+                onMouseLeave={() => {
+                  dragScrollState.current.isDown = false;
+                }}
+                onMouseUp={() => {
+                  resetWeatherIdleTimer();
+                  dragScrollState.current.isDown = false;
+                }}
+                onMouseMove={(e) => {
+                  resetWeatherIdleTimer();
+                  if (!dragScrollState.current.isDown || !hourlyScrollRef.current) return;
+                  e.preventDefault();
+                  const x = e.pageX - hourlyScrollRef.current.offsetLeft;
+                  const walk = (x - dragScrollState.current.startX) * 1.4;
+                  hourlyScrollRef.current.scrollLeft = dragScrollState.current.scrollLeft - walk;
+                }}
+                className="flex items-stretch gap-1.5 overflow-x-auto no-scrollbar pb-1 touch-pan-x cursor-grab active:cursor-grabbing"
+              >
+                {weather.hourly.map((h, idx) => (
+                  <div
+                    key={`${h.hour}-${idx}`}
+                    className={`flex-shrink-0 min-w-[76px] rounded-lg p-1.5 flex flex-col items-center gap-0.5 text-center border ${
+                      idx === 0
+                        ? 'bg-primary-fixed/35 border-primary/30'
+                        : 'bg-surface-container-low border-surface-container'
+                    }`}
+                  >
+                    <span className="font-label-sm text-[10px] font-extrabold text-on-surface">
+                      {h.hour}
+                    </span>
+                    <span
+                      className="material-symbols-outlined text-base text-primary"
+                      style={{ fontVariationSettings: "'FILL' 1" }}
+                    >
+                      {h.icon}
+                    </span>
+                    <span className="font-label-md text-label-md font-extrabold text-on-surface">
+                      {h.temp}°C
+                    </span>
+                    <span className="font-label-sm text-[9px] text-primary font-bold">
+                      🌧️ {h.rainProb}% ({h.precipMm}mm)
+                    </span>
+                    <span className="font-label-sm text-[9px] text-secondary font-medium">
+                      💨 {h.wind} km/h
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Mapa Interactivo Real de Jujuy (Leaflet + OpenStreetMap) */}
-      <JujuyMap
-        selectedZone={selectedZone}
-        selectedSubzoneCoords={selectedSubzoneCoords}
-        alerts={alerts}
-        isPlacingPin={isPlacingPin}
-        onPinPlaced={handlePinPlaced}
-        onCancelPlacing={() => setIsPlacingPin(false)}
-      />
-
-      {/* Botón Acción Rápida: Agregar Alerta (Habilita pin arrastrable en el mapa) */}
-      <div className="flex items-center gap-2">
-        <button
-          id="btn-quick-report"
-          onClick={handleStartAddAlert}
-          className={`flex-1 h-12 rounded-full px-space-md flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all ${
-            isPlacingPin
-              ? 'bg-primary-container text-on-primary-container font-extrabold'
-              : 'bg-inverse-surface text-inverse-on-surface'
-          }`}
-          type="button"
-        >
-          <span
-            className={`material-symbols-outlined text-xl ${
-              isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
-            }`}
-          >
-            {!canWriteMap ? 'lock' : isPlacingPin ? 'open_with' : 'add_location_alt'}
-          </span>
-          <span className="font-label-lg text-label-lg">
-            {!canWriteMap
-              ? 'Iniciar Sesión para Agregar Alerta'
-              : isPlacingPin
-              ? 'Arrastrá el Pin en el Mapa (Cancelar)'
-              : 'Agregar Alerta'}
-          </span>
-        </button>
+      {/* 3. BOTONES FLOTANTES SOBRE EL MAPA (Justo encima de la barra deslizable, estilo PedidosYa) */}
+      <div
+        style={{ bottom: `${Math.min(sheetHeightPx + 12, 230)}px` }}
+        className="absolute left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none transition-[bottom] duration-150"
+      >
+        {/* Botón Circular Izquierdo: Actualizar Radar */}
         <button
           onClick={fetchAlerts}
-          className="w-12 h-12 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center shadow-sm active:scale-90 transition-transform flex-shrink-0"
+          className="pointer-events-auto w-11 h-11 rounded-full bg-surface-container-lowest/95 text-on-surface flex items-center justify-center shadow-lg border border-surface-container active:scale-90 transition-transform flex-shrink-0"
           title="Actualizar Radar"
           type="button"
         >
           <span className="material-symbols-outlined text-xl">refresh</span>
         </button>
+
+        {/* Botón Derecho Flotante: Agregar Alerta (Habilita pin arrastrable en el mapa) */}
+        <button
+          id="btn-quick-report"
+          onClick={handleStartAddAlert}
+          className={`pointer-events-auto h-11 rounded-full px-4 flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all ${
+            isPlacingPin
+              ? 'bg-primary-container text-on-primary-container font-extrabold ring-4 ring-primary/30'
+              : 'bg-inverse-surface/95 text-inverse-on-surface font-bold'
+          }`}
+          type="button"
+        >
+          <span
+            className={`material-symbols-outlined text-lg ${
+              isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
+            }`}
+          >
+            {!canWriteMap ? 'lock' : isPlacingPin ? 'close' : 'add_location_alt'}
+          </span>
+          <span className="font-label-md text-label-md">
+            {!canWriteMap
+              ? 'Iniciar Sesión para Alerta'
+              : isPlacingPin
+              ? 'Cancelar Pin'
+              : 'Agregar Alerta'}
+          </span>
+        </button>
       </div>
 
-      {/* Feed de Alertas Comunitarias en Vivo */}
-      <div className="flex flex-col space-y-space-sm pt-1">
-        {/* Filtros de Feed */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-primary text-xl">radar</span>
-            <h2 className="font-headline-md text-headline-md text-on-surface">Radar de Alertas</h2>
+      {/* 4. BARRA / CAJÓN INFERIOR DESLIZABLE (Sube y baja a voluntad del usuario como en PedidosYa) */}
+      <section
+        style={{ height: `${sheetHeightPx}px` }}
+        className={`absolute left-0 right-0 bottom-0 z-30 bg-surface-container-lowest rounded-t-3xl shadow-[0_-8px_30px_rgba(21,28,39,0.18)] border-t border-surface-container flex flex-col overflow-hidden ${
+          isDraggingSheet ? '' : 'transition-[height] duration-200 ease-out'
+        }`}
+      >
+        {/* Manija y Cabecera Táctil para Deslizar Arriba / Abajo */}
+        <div
+          onTouchStart={(e) => {
+            if (e.touches?.[0]) handleSheetPointerStart(e.touches[0].clientY);
+          }}
+          onTouchMove={(e) => {
+            if (e.touches?.[0]) handleSheetPointerMove(e.touches[0].clientY);
+          }}
+          onTouchEnd={handleSheetPointerEnd}
+          onMouseDown={(e) => handleSheetPointerStart(e.clientY)}
+          className="pt-2 pb-2 px-4 cursor-grab active:cursor-grabbing touch-none flex-shrink-0 bg-surface-container-lowest"
+        >
+          {/* Barrita Indicadora (Drag Handle) */}
+          <div className="w-11 h-1.5 rounded-full bg-secondary/30 mx-auto mb-2" />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-primary text-xl">radar</span>
+              <h2 className="font-headline-md text-headline-md text-on-surface font-extrabold">
+                Radar de Alertas ({filteredAlerts.length})
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSheetHeightPx(
+                  isSheetCollapsed ? getHalfSheetHeight() : SHEET_COLLAPSED_PX
+                );
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm font-bold active:scale-95"
+            >
+              <span>{isSheetCollapsed ? 'Deslizá o tocá ↑' : 'Bajar barra ↓'}</span>
+            </button>
           </div>
-          <span className="font-label-sm text-label-sm text-secondary bg-surface-container px-2 py-0.5 rounded-full font-bold">
-            14 cadetes activos
-          </span>
         </div>
 
-        {/* Chips Horizontales de Filtro */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        {/* Chips Horizontales de Filtro (Siempre visibles incluso con la barra baja) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-4 pb-2.5 flex-shrink-0 border-b border-surface-container/70">
           <button
-            onClick={() => setActiveFilter('all')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md shadow-sm flex-shrink-0 transition-colors ${
+            onClick={() => {
+              setActiveFilter('all');
+              if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
+            }}
+            className={`px-3 py-1 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 transition-colors ${
               activeFilter === 'all'
                 ? 'bg-primary text-on-primary font-bold'
-                : 'bg-surface-container-lowest text-secondary'
+                : 'bg-surface-container-low text-secondary'
             }`}
             type="button"
           >
             Todos ({alerts.length})
           </button>
           <button
-            onClick={() => setActiveFilter('gruas')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md shadow-sm flex-shrink-0 flex items-center gap-1 transition-colors ${
+            onClick={() => {
+              setActiveFilter('gruas');
+              if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
+            }}
+            className={`px-3 py-1 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1 transition-colors ${
               activeFilter === 'gruas'
                 ? 'bg-primary text-on-primary font-bold'
-                : 'bg-surface-container-lowest text-secondary'
+                : 'bg-surface-container-low text-secondary'
             }`}
             type="button"
           >
@@ -768,11 +920,14 @@ export default function MapaPage() {
             Grúas/Tránsito
           </button>
           <button
-            onClick={() => setActiveFilter('lluvia')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md shadow-sm flex-shrink-0 flex items-center gap-1 transition-colors ${
+            onClick={() => {
+              setActiveFilter('lluvia');
+              if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
+            }}
+            className={`px-3 py-1 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1 transition-colors ${
               activeFilter === 'lluvia'
                 ? 'bg-primary text-on-primary font-bold'
-                : 'bg-surface-container-lowest text-secondary'
+                : 'bg-surface-container-low text-secondary'
             }`}
             type="button"
           >
@@ -780,11 +935,14 @@ export default function MapaPage() {
             Lluvia/Badenes
           </button>
           <button
-            onClick={() => setActiveFilter('cuponeros')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md shadow-sm flex-shrink-0 flex items-center gap-1 transition-colors ${
+            onClick={() => {
+              setActiveFilter('cuponeros');
+              if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
+            }}
+            className={`px-3 py-1 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1 transition-colors ${
               activeFilter === 'cuponeros'
                 ? 'bg-primary text-on-primary font-bold'
-                : 'bg-surface-container-lowest text-secondary'
+                : 'bg-surface-container-low text-secondary'
             }`}
             type="button"
           >
@@ -793,8 +951,8 @@ export default function MapaPage() {
           </button>
         </div>
 
-        {/* Lista de Tarjetas de Alertas */}
-        <div className="flex flex-col space-y-space-sm">
+        {/* Lista Desplazable de Tarjetas de Alertas (Visible al subir la barra) */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 bg-surface">
           {filteredAlerts.map((alertItem) => {
             const isConfirmed = confirmedAlerts[alertItem.id];
             const canDelete = user && (alertItem.user_id === user.id || isAdmin);
@@ -809,7 +967,7 @@ export default function MapaPage() {
             return (
               <article
                 key={alertItem.id}
-                className="relative bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col space-y-space-xs overflow-hidden border border-surface-container/40"
+                className="relative bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col space-y-1.5 overflow-hidden border border-surface-container/60"
               >
                 <div
                   className={`absolute left-0 top-0 bottom-0 w-1.5 ${
@@ -822,7 +980,18 @@ export default function MapaPage() {
                     {alertItem.badge}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-body-sm text-body-sm text-secondary">{alertItem.time}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleFocusAlertOnMap(alertItem)}
+                      className="text-primary font-label-sm text-label-sm font-bold flex items-center gap-0.5 hover:underline"
+                      title="Ver pin en el mapa"
+                    >
+                      <span className="material-symbols-outlined text-sm">pin_drop</span>
+                      Ver en mapa
+                    </button>
+                    <span className="font-body-sm text-body-sm text-secondary">
+                      {alertItem.time}
+                    </span>
                     {canDelete && (
                       <button
                         type="button"
@@ -836,10 +1005,14 @@ export default function MapaPage() {
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <h3 className="font-label-lg text-label-lg text-on-surface">{alertItem.title}</h3>
-                  <p className="font-body-md text-body-md text-secondary mt-0.5">{alertItem.desc}</p>
+                  <h3 className="font-label-lg text-label-lg text-on-surface font-extrabold">
+                    {alertItem.title}
+                  </h3>
+                  <p className="font-body-sm text-body-sm text-secondary mt-0.5">
+                    {alertItem.desc}
+                  </p>
                 </div>
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center justify-between pt-1.5">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -875,14 +1048,16 @@ export default function MapaPage() {
                     </span>
                   )}
                   {alertItem.author && !alertItem.verified && (
-                    <span className="font-body-sm text-body-sm text-secondary">{alertItem.author}</span>
+                    <span className="font-body-sm text-body-sm text-secondary">
+                      {alertItem.author}
+                    </span>
                   )}
                 </div>
               </article>
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* Modal / Sheet Rápido de Reporte — z-[100] centrado para no quedar tapado por BottomNav */}
       {isReportModalOpen && (
@@ -901,7 +1076,7 @@ export default function MapaPage() {
               </button>
             </div>
             <p className="font-body-sm text-body-sm text-secondary">
-              El pin quedará registrado con tu ID de Cadete Verificado ({profile?.full_name || user?.email}).
+              El pin quedará registrado con tu usuario ({profile?.full_name || user?.email}).
             </p>
             {pickedCoords && (
               <div className="px-3 py-1.5 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-primary flex items-center justify-between">

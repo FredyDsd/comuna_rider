@@ -57,18 +57,26 @@ export default function Layout() {
     navigate('/');
   };
 
+  const isMapRoute = location.pathname === '/' || location.pathname === '/mapa';
+
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col items-center">
       {/* Mobile Shell Wrapper (max-w-md) */}
       <div className="w-full max-w-md min-h-screen bg-surface relative flex flex-col shadow-xl">
         <Header title={getScreenTitle(location.pathname)} />
 
-        <main className="flex-1 w-full pt-16 pb-24 px-space-md bg-surface">
+        <main
+          className={
+            isMapRoute
+              ? 'relative flex-1 w-full pt-16 pb-16 overflow-hidden bg-surface'
+              : 'flex-1 w-full pt-16 pb-24 px-space-md bg-surface'
+          }
+        >
           <Outlet />
         </main>
 
         {/* Botón flotante SOS Auxilio (Exclusivo para Cadetes Verificados Nivel 2+) */}
-        {canUseCadeteTools && (
+        {canUseCadeteTools && !isMapRoute && (
           <aside className="fixed max-w-md w-full bottom-20 px-4 pointer-events-none z-40 flex justify-end">
             <button
               type="button"

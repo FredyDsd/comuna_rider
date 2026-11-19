@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -110,12 +110,12 @@ function createPinIcon(type = 'critical', isTemp = false) {
     className: 'custom-jujuy-pin',
     html: isTemp
       ? `<div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-14px);">
-          <div style="background:#151c27;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap;margin-bottom:3px;box-shadow:0 2px 6px rgba(0,0,0,0.35);">
+          <div style="background:#151c27;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap;margin-bottom:3px;box-shadow:0 2px 6px rgba(0,0,0,0.35);">
             👆 Arrastrame al lugar
           </div>
           <div style="
-            width: 42px;
-            height: 42px;
+            width: 44px;
+            height: 44px;
             border-radius: 9999px;
             background: #ea0029;
             color: #fff;
@@ -129,8 +129,8 @@ function createPinIcon(type = 'critical', isTemp = false) {
           ">📍</div>
         </div>`
       : `<div style="
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: 9999px;
           background: ${bg};
           color: #fff;
@@ -141,9 +141,9 @@ function createPinIcon(type = 'critical', isTemp = false) {
           border: 2.5px solid #ffffff;
           box-shadow: 0 4px 10px rgba(0,0,0,0.32);
         ">${emoji}</div>`,
-    iconSize: isTemp ? [130, 64] : [34, 34],
-    iconAnchor: isTemp ? [65, 58] : [17, 34],
-    popupAnchor: [0, -32],
+    iconSize: isTemp ? [130, 66] : [36, 36],
+    iconAnchor: isTemp ? [65, 60] : [18, 36],
+    popupAnchor: [0, -34],
   });
 }
 
@@ -158,17 +158,14 @@ export default function JujuyMap({
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
-  const zonesLayerRef = useRef(null);
   const tempMarkerRef = useRef(null);
   const onPinPlacedRef = useRef(onPinPlaced);
-  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     onPinPlacedRef.current = onPinPlaced;
   }, [onPinPlaced]);
 
-  // Inicializar mapa Leaflet con bloqueo estricto fuera de Jujuy / Palpalá
-  // Sin colocar pines al tocar el mapa
+  // Inicializar mapa Leaflet a pantalla completa al fondo con bloqueo fuera de Jujuy / Palpalá
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -181,7 +178,7 @@ export default function JujuyMap({
       maxZoom: 18,
       maxBounds: GRAN_JUJUY_BOUNDS,
       maxBoundsViscosity: 0.9,
-      zoomControl: true,
+      zoomControl: false, // Usamos controles flotantes propios estilo PedidosYa para no chocar con el HUD superior
     });
 
     // Solo descarga tiles dentro del área operativa de Gran Jujuy (+10 km de margen)
@@ -192,19 +189,22 @@ export default function JujuyMap({
       bounds: GRAN_JUJUY_BOUNDS,
     }).addTo(map);
 
-    const zonesLayer = L.layerGroup().addTo(map);
     const markersLayer = L.layerGroup().addTo(map);
-    zonesLayerRef.current = zonesLayer;
     markersLayerRef.current = markersLayer;
     mapInstanceRef.current = map;
 
+    const resizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
     return () => {
+      clearTimeout(resizeTimer);
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
 
-  // Centrar el mapa al cambiar de zona (sin dibujar recuadros sobre las calles)
+  // Centrar el mapa al cambiar de zona
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -217,21 +217,12 @@ export default function JujuyMap({
     }
   }, [selectedZone]);
 
-  // Mover cámara cuando el usuario elige un barrio específico dentro de la zona
+  // Mover cámara cuando el usuario elige un barrio específico o toca una alerta
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !selectedSubzoneCoords) return;
     map.flyTo(selectedSubzoneCoords, 15, { duration: 0.65 });
   }, [selectedSubzoneCoords]);
-
-  // Recalcular tamaño cuando el usuario expande/contrae el mapa
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 220);
-  }, [isExpanded]);
 
   // Renderizar pines de alertas activas
   useEffect(() => {
@@ -247,7 +238,7 @@ export default function JujuyMap({
       });
 
       marker.bindPopup(
-        `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 170px;">
+        `<div style="font-family: 'Plus Jakarta Sans', sans-serif; min-width: 175px;">
           <div style="font-size: 10px; font-weight: 800; color: #ea0029; text-transform: uppercase;">${a.badge}</div>
           <div style="font-size: 13px; font-weight: 700; color: #151c27; margin-top: 2px;">${a.title}</div>
           <div style="font-size: 11px; color: #575e70; margin-top: 4px;">${a.desc}</div>
@@ -301,38 +292,65 @@ export default function JujuyMap({
     });
   };
 
+  const handleZoomIn = () => {
+    mapInstanceRef.current?.zoomIn();
+  };
+
+  const handleZoomOut = () => {
+    mapInstanceRef.current?.zoomOut();
+  };
+
+  const handleRecenterZone = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const target =
+      selectedSubzoneCoords ||
+      JUJUY_MACRO_ZONES[selectedZone]?.center || [-24.1875, -65.2965];
+    map.flyTo(target, selectedSubzoneCoords ? 15 : 14, { duration: 0.6 });
+  };
+
   return (
-    <div
-      className={`relative z-10 isolate w-full ${
-        isExpanded ? 'h-96' : 'h-72'
-      } rounded-xl overflow-hidden shadow-sm border ${
-        isPlacingPin ? 'border-primary ring-2 ring-primary/30' : 'border-surface-container'
-      } transition-all duration-200`}
-    >
-      {/* Lienzo interactivo de Leaflet */}
+    <div className="relative w-full h-full overflow-hidden select-none">
+      {/* Lienzo interactivo de Leaflet ocupando todo el fondo */}
       <div ref={mapContainerRef} className="w-full h-full z-10" />
 
-      {/* Botón Superior Derecho (sin tapar los controles +/- de la izquierda) */}
-      <div className="absolute top-2.5 right-2.5 z-[400] flex items-center justify-end pointer-events-none">
+      {/* Controles flotantes laterales de Zoom y Centrado (estilo PedidosYa Rider) */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 z-[400] flex flex-col gap-2 pointer-events-none">
         <button
           type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
-          className="pointer-events-auto px-2.5 py-1 rounded-full bg-surface-container-lowest/95 text-on-surface shadow-md font-label-sm text-label-sm font-bold flex items-center gap-1 active:scale-95 transition-transform"
+          onClick={handleRecenterZone}
+          className="pointer-events-auto w-10 h-10 rounded-full bg-surface-container-lowest/95 text-primary shadow-md border border-surface-container flex items-center justify-center active:scale-90 transition-transform"
+          title="Centrar en zona actual"
         >
-          <span className="material-symbols-outlined text-sm">
-            {isExpanded ? 'close_fullscreen' : 'open_in_full'}
-          </span>
-          {isExpanded ? 'Achicar' : 'Ampliar Mapa'}
+          <span className="material-symbols-outlined text-xl">my_location</span>
         </button>
+        <div className="pointer-events-auto flex flex-col rounded-2xl bg-surface-container-lowest/95 text-on-surface shadow-md border border-surface-container overflow-hidden">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="w-10 h-9 flex items-center justify-center hover:bg-surface-container-low active:bg-surface-container transition-colors border-b border-surface-container"
+            title="Acercar mapa"
+          >
+            <span className="material-symbols-outlined text-lg">add</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="w-10 h-9 flex items-center justify-center hover:bg-surface-container-low active:bg-surface-container transition-colors"
+            title="Alejar mapa"
+          >
+            <span className="material-symbols-outlined text-lg">remove</span>
+          </button>
+        </div>
       </div>
 
-      {/* Barra Inferior Flotante sobre el Mapa (Solo aparece cuando se activa Agregar Alerta) */}
+      {/* Barra Flotante sobre el Mapa cuando se está arrastrando el pin para Agregar Alerta */}
       {isPlacingPin && (
-        <div className="absolute bottom-2.5 left-2.5 right-2.5 z-[400] flex items-center justify-between gap-2 pointer-events-none">
-          <div className="pointer-events-auto w-full bg-inverse-surface/95 text-inverse-on-surface px-3 py-2 rounded-xl shadow-lg flex items-center justify-between gap-2">
+        <div className="absolute top-28 left-3 right-3 z-[450] flex items-center justify-between gap-2 pointer-events-none animate-in fade-in duration-150">
+          <div className="pointer-events-auto w-full bg-inverse-surface/95 text-inverse-on-surface px-3.5 py-2.5 rounded-2xl shadow-xl flex items-center justify-between gap-2 border border-white/10">
             <div className="min-w-0">
               <span className="font-label-sm text-label-sm text-tertiary-fixed block uppercase font-extrabold">
-                📍 Arrastrá y soltá el pin en el mapa
+                📍 Arrastrá y soltá el pin al lugar exacto
               </span>
               <span className="font-body-sm text-body-sm text-inverse-on-surface/80 truncate block">
                 Al soltar el pin se abrirá el menú de opciones
