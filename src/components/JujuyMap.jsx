@@ -241,6 +241,7 @@ function buildPinPopupHtml(item) {
 export default function JujuyMap({
   selectedZone = 'Centro y Barrios',
   selectedSubzoneCoords = null,
+  userGpsCoords = null,
   alerts = [],
   isPlacingPin = false,
   onPinPlaced,
@@ -250,6 +251,7 @@ export default function JujuyMap({
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
+  const gpsLayerRef = useRef(null);
   const tempMarkerRef = useRef(null);
   const onPinPlacedRef = useRef(onPinPlaced);
   const onSelectPinRef = useRef(onSelectPin);
@@ -287,7 +289,9 @@ export default function JujuyMap({
     }).addTo(map);
 
     const markersLayer = L.layerGroup().addTo(map);
+    const gpsLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
+    gpsLayerRef.current = gpsLayer;
     mapInstanceRef.current = map;
 
     const resizeTimer = setTimeout(() => {
@@ -320,6 +324,48 @@ export default function JujuyMap({
     if (!map || !selectedSubzoneCoords) return;
     map.flyTo(selectedSubzoneCoords, 15, { duration: 0.65 });
   }, [selectedSubzoneCoords]);
+
+  // Mostrar marcador azul pulsante con ubicación GPS real del delivery
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const layer = gpsLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+    if (!userGpsCoords || typeof userGpsCoords.lat !== 'number' || typeof userGpsCoords.lng !== 'number') {
+      return;
+    }
+
+    const pos = [userGpsCoords.lat, userGpsCoords.lng];
+    const radius = Math.min(Math.max(userGpsCoords.accuracy || 25, 15), 160);
+
+    L.circle(pos, {
+      radius,
+      color: '#2563eb',
+      fillColor: '#3b82f6',
+      fillOpacity: 0.14,
+      weight: 1.5,
+    }).addTo(layer);
+
+    const gpsIcon = L.divIcon({
+      className: 'custom-gps-dot',
+      html: `<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;inset:0;border-radius:9999px;background:rgba(37,99,235,0.32);"></div>
+        <div style="width:14px;height:14px;border-radius:9999px;background:#2563eb;border:2.5px solid #ffffff;box-shadow:0 2px 8px rgba(37,99,235,0.6);"></div>
+      </div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+
+    const gpsMarker = L.marker(pos, { icon: gpsIcon }).addTo(layer);
+    gpsMarker.bindPopup(
+      `<div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:800;color:#1d4ed8;">🔵 Tu ubicación real GPS${
+        userGpsCoords.accuracy ? ` (±${Math.round(userGpsCoords.accuracy)}m)` : ''
+      }</div>`
+    );
+
+    map.flyTo(pos, 16, { duration: 0.6 });
+  }, [userGpsCoords]);
 
   // Renderizar pines de alertas activas
   useEffect(() => {

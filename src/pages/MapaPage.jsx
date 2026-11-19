@@ -515,7 +515,10 @@ export default function MapaPage() {
   const [sosNote, setSosNote] = useState('');
   const [sosPhone, setSosPhone] = useState('');
   const [sosCoords, setSosCoords] = useState(null);
-  const [gpsStatus, setGpsStatus] = useState('idle'); // 'idle' | 'locating' | 'ready' | 'error'
+  const [sosAddress, setSosAddress] = useState('');
+  const [gpsStatus, setGpsStatus] = useState('idle'); // 'idle' | 'locating' | 'ready' | 'manual' | 'error'
+  const [gpsErrorMsg, setGpsErrorMsg] = useState('');
+  const [isPickingSosOnMap, setIsPickingSosOnMap] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [lastSentSos, setLastSentSos] = useState(null);
 
@@ -945,9 +948,39 @@ export default function MapaPage() {
     }
   };
 
-  const handlePinPlaced = (coords) => {
-    setPickedCoords(coords);
+  const resolveReverseAddress = useCallback(async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es`
+      );
+      if (!res.ok) return '';
+      const data = await res.json();
+      const addr = data?.address || {};
+      const road = addr.road || addr.pedestrian || '';
+      const house = addr.house_number ? ` ${addr.house_number}` : '';
+      const barrio = addr.neighbourhood || addr.suburb || addr.quarter || '';
+      const compact = [road ? `${road}${house}` : '', barrio].filter(Boolean).join(', ');
+      return compact || data?.display_name?.split(',').slice(0, 2).join(',').trim() || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const handlePinPlaced = async (coords) => {
     setIsPlacingPin(false);
+    if (isPickingSosOnMap) {
+      setIsPickingSosOnMap(false);
+      setSosCoords({ lat: coords.lat, lng: coords.lng, accuracy: null });
+      setGpsStatus('manual');
+      setGpsErrorMsg('');
+      setSelectedSubzoneCoords([coords.lat, coords.lng]);
+      setIsSosModalOpen(true);
+      const addrText = await resolveReverseAddress(coords.lat, coords.lng);
+      if (addrText) setSosAddress(addrText);
+      return;
+    }
+
+    setPickedCoords(coords);
     if (activeLayer === 'calles') applyPresetByLayer('calles_lluvia');
     else if (activeLayer === 'gomerias') applyPresetByLayer('gomerias');
     else if (activeLayer === 'clientes' && canUseCadeteTools) applyPresetByLayer('clientes');
@@ -1234,40 +1267,101 @@ export default function MapaPage() {
     setCommentingItemId(null);
   };
 
-  // Geolocalización y apertura del Modal SOS (Solo Delivery Nivel 2+)
-  const locateForSos = useCallback(() => {
-    if (!navigator.geolocation) {
+  // Captura la ubicación GPS real del delivery (alta precisión + reintento bajo techo + dirección por Nominatim)
+  const requestRealGpsLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsStatus('error');
-      return;
+      setGpsErrorMsg('Este navegador no soporta geolocalización GPS.');
+      return Promise.resolve(null);
     }
+
+    const isNonHttpsLan =
+      typeof window !== 'undefined' &&
+      !window.isSecureContext &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
     setGpsStatus('locating');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setSosCoords({
+    setGpsErrorMsg('');
+
+    const getPos = (options) =>
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      });
+
+    return getPos({ enableHighAccuracy: true, maximumAge: 0, timeout: 10000 })
+      .catch((err) => {
+        // Si falla alta precisión bajo techo o tarda demasiado (code 2 o 3), reintenta por red/Wi-Fi
+        if (err && (err.code === 2 || err.code === 3)) {
+          return getPos({ enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 });
+        }
+        throw err;
+      })
+      .then(async (pos) => {
+        const nextCoords = {
           lat: Number(pos.coords.latitude.toFixed(5)),
           lng: Number(pos.coords.longitude.toFixed(5)),
-        });
+          accuracy: Math.round(pos.coords.accuracy || 0),
+        };
+        setSosCoords(nextCoords);
         setGpsStatus('ready');
-      },
-      () => {
+        setGpsErrorMsg('');
+        setSelectedSubzoneCoords([nextCoords.lat, nextCoords.lng]);
+
+        const addrText = await resolveReverseAddress(nextCoords.lat, nextCoords.lng);
+        if (addrText) setSosAddress(addrText);
+        return { coords: nextCoords, address: addrText };
+      })
+      .catch((err) => {
         setGpsStatus('error');
-      },
-      { enableHighAccuracy: true, timeout: 7000 }
-    );
-  }, []);
+        if (isNonHttpsLan) {
+          setGpsErrorMsg(
+            'El navegador del celular bloquea el GPS en IP local sin HTTPS. Probá en el link HTTPS de Vercel o marcá tu punto exacto en el mapa.'
+          );
+        } else if (err?.code === 1) {
+          setGpsErrorMsg(
+            'Permiso de ubicación denegado. Habilitá el GPS para el sitio o marcá tu punto en el mapa.'
+          );
+        } else {
+          setGpsErrorMsg(
+            'No se pudo obtener señal GPS en este momento. Reintentá o marcá tu punto en el mapa.'
+          );
+        }
+        return null;
+      });
+  }, [resolveReverseAddress]);
 
   const handleOpenSosModal = () => {
     if (!canUseCadeteTools) return;
     setSosPhone(profile?.whatsapp || '');
     setSosNote('');
     setLastSentSos(null);
-    locateForSos();
+    setIsPickingSosOnMap(false);
     setIsSosModalOpen(true);
+    requestRealGpsLocation();
+  };
+
+  const handleStartManualSosPin = () => {
+    setIsSosModalOpen(false);
+    setIsPickingSosOnMap(true);
+    setSheetHeightPx(SHEET_COLLAPSED_PX);
+    setIsPlacingPin(true);
   };
 
   const handleEmitSos = async () => {
     if (!canUseCadeteTools || !user) return;
     setSendingSos(true);
+
+    // Si todavía no había terminado de capturar el GPS real, lo espera antes de emitir
+    let resolvedCoords = sosCoords;
+    let resolvedAddress = sosAddress;
+    if (!resolvedCoords) {
+      const gpsRes = await requestRealGpsLocation();
+      if (gpsRes?.coords) {
+        resolvedCoords = gpsRes.coords;
+        resolvedAddress = gpsRes.address || resolvedAddress;
+      }
+    }
 
     const riderName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Jujuy';
     const vehicle = profile?.vehicle || 'Moto';
@@ -1277,8 +1371,9 @@ export default function MapaPage() {
     });
     const fallbackCoords =
       selectedSubzoneCoords || JUJUY_ZONES_COORDS[selectedZone] || [-24.1858, -65.2995];
-    const finalLat = sosCoords?.lat ?? fallbackCoords[0];
-    const finalLng = sosCoords?.lng ?? fallbackCoords[1];
+    const finalLat = resolvedCoords?.lat ?? fallbackCoords[0];
+    const finalLng = resolvedCoords?.lng ?? fallbackCoords[1];
+    const isRealGps = Boolean(resolvedCoords);
     const expiresAt = Date.now() + TTL_BY_SUBTYPE.sos;
     const phoneToShare = sosPhone.trim() || profile?.whatsapp || '';
 
@@ -1287,12 +1382,21 @@ export default function MapaPage() {
       urgency: selectedSosOption.urgency,
       phone: phoneToShare,
       eventTime: `${timeStr} hs`,
+      address: resolvedAddress || '',
+      isRealGps,
+      accuracy: resolvedCoords?.accuracy || null,
       helpers: [],
       expiresAt,
     };
 
     const sosTitle = `${selectedSosOption.titlePrefix} • ${riderName} (${vehicle})`;
-    const sosDescription = `${sosNote.trim() || selectedSosOption.label}. Zona: ${selectedZone} (${selectedSubzone}) • Hora: ${timeStr} hs${
+    const locationText = resolvedAddress
+      ? `Calle: ${resolvedAddress}`
+      : isRealGps
+      ? `GPS real: ${finalLat}, ${finalLng}`
+      : `Zona: ${selectedZone} (${selectedSubzone})`;
+
+    const sosDescription = `${sosNote.trim() || selectedSosOption.label}. ${locationText} • Hora: ${timeStr} hs${
       phoneToShare ? ` • WhatsApp: ${phoneToShare}` : ''
     }`;
 
@@ -1308,7 +1412,7 @@ export default function MapaPage() {
           : `🚨 AUXILIO MECÁNICO • ${timeStr} hs`,
       title: sosTitle,
       description: sosDescription,
-      zone: selectedZone,
+      zone: resolvedAddress || selectedZone,
       lat: finalLat,
       lng: finalLng,
       confirm_count: 1,
@@ -1337,7 +1441,7 @@ export default function MapaPage() {
             confirmCount: 1,
             verified: true,
             category: 'sos',
-            zone: selectedZone,
+            zone: newSosRow.zone,
             lat: finalLat,
             lng: finalLng,
             ...extraObj,
@@ -1352,7 +1456,8 @@ export default function MapaPage() {
         note: sosNote.trim(),
         phone: phoneToShare,
         time: `${timeStr} hs`,
-        zone: `${selectedZone} (${selectedSubzone})`,
+        zone: resolvedAddress || `${selectedZone} (${selectedSubzone})`,
+        isRealGps,
         lat: finalLat,
         lng: finalLng,
       });
@@ -1458,10 +1563,17 @@ export default function MapaPage() {
         <JujuyMap
           selectedZone={selectedZone}
           selectedSubzoneCoords={selectedSubzoneCoords}
+          userGpsCoords={sosCoords}
           alerts={activeLayerItems}
           isPlacingPin={isPlacingPin}
           onPinPlaced={handlePinPlaced}
-          onCancelPlacing={() => setIsPlacingPin(false)}
+          onCancelPlacing={() => {
+            setIsPlacingPin(false);
+            if (isPickingSosOnMap) {
+              setIsPickingSosOnMap(false);
+              setIsSosModalOpen(true);
+            }
+          }}
         />
       </div>
 
@@ -2371,8 +2483,9 @@ export default function MapaPage() {
                     <span>¡SOS publicado en el Radar de Cadetes!</span>
                   </div>
                   <p className="font-body-sm text-body-sm">
-                    Todos los compañeros conectados en la app ya ven tu ubicación ({lastSentSos.lat},{' '}
-                    {lastSentSos.lng}) y teléfono.
+                    Todos los compañeros conectados en la app ya ven tu ubicación en{' '}
+                    <strong>{lastSentSos.zone}</strong> ({lastSentSos.lat}, {lastSentSos.lng}) y tu
+                    teléfono.
                   </p>
                 </div>
 
@@ -2475,22 +2588,59 @@ export default function MapaPage() {
                   </div>
                 </div>
 
-                {/* Ubicación GPS, Teléfono y Nota breve */}
+                {/* Ubicación GPS Real, Dirección Detectada, Teléfono y Nota breve */}
                 <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface-container-low text-[11px]">
-                    <span className="font-bold text-on-surface">
-                      {gpsStatus === 'locating'
-                        ? '📡 Obteniendo GPS exacto...'
-                        : sosCoords
-                        ? `📍 GPS Listo: ${sosCoords.lat}, ${sosCoords.lng}`
-                        : `📍 Zona: ${selectedZone} (${selectedSubzone})`}
-                    </span>
+                  <div
+                    className={`p-3 rounded-xl border space-y-1.5 ${
+                      gpsStatus === 'ready' || gpsStatus === 'manual'
+                        ? 'bg-sky-50 border-sky-300'
+                        : gpsStatus === 'error'
+                        ? 'bg-amber-50 border-amber-300'
+                        : 'bg-surface-container-low border-surface-container'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-extrabold text-on-surface">
+                        {gpsStatus === 'locating'
+                          ? '📡 Obteniendo ubicación GPS real...'
+                          : gpsStatus === 'ready' && sosCoords
+                          ? `🔵 GPS Real (±${sosCoords.accuracy || 15}m): ${sosCoords.lat}, ${sosCoords.lng}`
+                          : gpsStatus === 'manual' && sosCoords
+                          ? `📍 Punto fijado en mapa: ${sosCoords.lat}, ${sosCoords.lng}`
+                          : '⚠️ Sin señal GPS automática'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={requestRealGpsLocation}
+                        className="text-primary font-extrabold underline flex-shrink-0"
+                      >
+                        Actualizar GPS
+                      </button>
+                    </div>
+
+                    {sosAddress && (
+                      <p className="font-label-sm text-[11px] font-bold text-sky-900">
+                        📍 Calle detectada: {sosAddress}
+                      </p>
+                    )}
+
+                    {gpsErrorMsg && (
+                      <p className="font-body-sm text-[11px] text-amber-900 leading-snug">
+                        {gpsErrorMsg}
+                      </p>
+                    )}
+
                     <button
                       type="button"
-                      onClick={locateForSos}
-                      className="text-primary font-extrabold underline"
+                      onClick={handleStartManualSosPin}
+                      className="w-full h-8 rounded-full bg-surface-container-lowest border border-surface-container text-on-surface font-label-sm text-[11px] font-bold flex items-center justify-center gap-1 active:scale-95"
                     >
-                      Actualizar GPS
+                      <span className="material-symbols-outlined text-sm text-primary">
+                        pin_drop
+                      </span>
+                      {sosCoords
+                        ? 'Ajustar mi punto exacto en el mapa'
+                        : 'Marcar mi ubicación exacta en el mapa'}
                     </button>
                   </div>
 
