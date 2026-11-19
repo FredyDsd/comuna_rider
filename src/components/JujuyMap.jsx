@@ -119,24 +119,25 @@ function createPinIcon(type = 'critical', isTemp = false) {
   return L.divIcon({
     className: 'custom-jujuy-pin',
     html: isTemp
-      ? `<div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-14px);">
-          <div style="background:#151c27;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap;margin-bottom:3px;box-shadow:0 2px 6px rgba(0,0,0,0.35);">
-            👆 Arrastrame al lugar
+      ? `<div style="width:90px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;cursor:grab;">
+          <div style="background:#151c27;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:9px;font-weight:800;line-height:11px;padding:1px 6px;border-radius:999px;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.3);">
+            Arrastrar
           </div>
           <div style="
-            width: 44px;
-            height: 44px;
+            width: 24px;
+            height: 24px;
             border-radius: 9999px;
             background: #ea0029;
-            color: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            border: 3px solid #ffffff;
-            box-shadow: 0 6px 16px rgba(234,0,41,0.55);
-            cursor: grab;
-          ">📍</div>
+            border: 2px solid #ffffff;
+            box-shadow: 0 3px 8px rgba(234,0,41,0.45);
+          ">
+            <div style="width:6px;height:6px;border-radius:9999px;background:#ffffff;"></div>
+          </div>
+          <div style="width:2px;height:10px;background:#151c27;"></div>
+          <div style="width:6px;height:6px;border-radius:9999px;background:#ea0029;border:1.5px solid #151c27;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
         </div>`
       : `<div style="
           width: ${isSos ? '40px' : '36px'};
@@ -155,9 +156,9 @@ function createPinIcon(type = 'critical', isTemp = false) {
               : '0 4px 10px rgba(0,0,0,0.32)'
           };
         ">${emoji}</div>`,
-    iconSize: isTemp ? [130, 66] : isSos ? [40, 40] : [36, 36],
-    iconAnchor: isTemp ? [65, 60] : isSos ? [20, 40] : [18, 36],
-    popupAnchor: [0, -34],
+    iconSize: isTemp ? [90, 54] : isSos ? [40, 40] : [36, 36],
+    iconAnchor: isTemp ? [45, 52] : isSos ? [20, 40] : [18, 36],
+    popupAnchor: isTemp ? [0, -52] : [0, -34],
   });
 }
 

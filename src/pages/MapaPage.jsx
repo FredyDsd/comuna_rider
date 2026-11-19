@@ -398,6 +398,7 @@ const CLIENT_TAGS = [
   '📍 Vive 1 cuadra más arriba',
   '📱 Teléfono mal en la app',
   '⚠️ Cuponero / Reclamo falso',
+  '✏️ Otro',
 ];
 
 const SOS_OPTIONS = [
@@ -502,6 +503,7 @@ export default function MapaPage() {
   const [reportHours, setReportHours] = useState('08:00 a 22:00');
   const [reportPhone, setReportPhone] = useState('+549388');
   const [reportClientTag, setReportClientTag] = useState(CLIENT_TAGS[0]);
+  const [customClientTag, setCustomClientTag] = useState('');
 
   // Historial de Clientes: input inline para agregar experiencia a una dirección existente
   const [commentingItemId, setCommentingItemId] = useState(null);
@@ -915,7 +917,7 @@ export default function MapaPage() {
       setReportLayer('controles');
       setReportSubType('control');
       setReportTitle(`Control Vial / ${selectedSubzone}`);
-      setReportDesc('Operativo de tránsito activo. Pidiendo casco, papeles y seguro.');
+      setReportDesc('');
     } else if (layerChoice === 'calles_lluvia') {
       setReportLayer('calles');
       setReportSubType('lluvia');
@@ -939,6 +941,7 @@ export default function MapaPage() {
       setReportTitle('');
       setReportDesc('');
       setReportClientTag(CLIENT_TAGS[0]);
+      setCustomClientTag('');
     }
   };
 
@@ -1005,25 +1008,37 @@ export default function MapaPage() {
         expiresAt: null,
       };
     } else if (reportLayer === 'clientes' && canUseCadeteTools) {
+      const resolvedClientTag =
+        reportClientTag === '✏️ Otro'
+          ? customClientTag.trim() || '✏️ Otro motivo'
+          : reportClientTag;
       category = 'cuponeros';
       type = 'security';
       badge = `📋 Historial Dirección • ${selectedZone}`;
       expiresAt = null;
       extraObj = {
         subType: 'cliente_historial',
-        tag: reportClientTag,
+        tag: resolvedClientTag,
         reportsCount: 1,
         comments: [
           {
             id: `c-${Date.now()}`,
             author: `${authorName} (${vehicle})`,
             date: 'Recién',
-            text: reportDesc.trim() || reportClientTag,
+            text: reportDesc.trim() || resolvedClientTag,
           },
         ],
         expiresAt: null,
       };
     }
+
+    const resolvedDescription =
+      reportLayer === 'controles'
+        ? reportDesc.trim()
+        : reportDesc.trim() ||
+          (reportLayer === 'clientes'
+            ? extraObj.tag
+            : `Reportado por ${authorRoleLabel}: ${authorName}.`);
 
     const newDbRow = {
       user_id: user.id,
@@ -1033,11 +1048,7 @@ export default function MapaPage() {
       category,
       badge,
       title: reportTitle.trim(),
-      description:
-        reportDesc.trim() ||
-        (reportLayer === 'clientes'
-          ? reportClientTag
-          : `Reportado por ${authorRoleLabel}: ${authorName}.`),
+      description: resolvedDescription,
       zone: selectedZone,
       lat: finalLat,
       lng: finalLng,
@@ -1922,7 +1933,9 @@ export default function MapaPage() {
                   <h3 className="font-label-lg text-label-lg text-on-surface font-extrabold">
                     {item.title}
                   </h3>
-                  <p className="font-body-sm text-body-sm text-secondary mt-0.5">{item.desc}</p>
+                  {item.desc && (
+                    <p className="font-body-sm text-body-sm text-secondary mt-0.5">{item.desc}</p>
+                  )}
                 </div>
 
                 {/* VISTA ESPECIAL CAPA 3: GOMERÍAS ESTABLES */}
@@ -2231,21 +2244,33 @@ export default function MapaPage() {
             </div>
 
             {reportLayer === 'clientes' && (
-              <div>
-                <label className="block font-label-sm text-label-sm text-secondary font-bold mb-1">
-                  Motivo Estadístico Principal
-                </label>
-                <select
-                  value={reportClientTag}
-                  onChange={(e) => setReportClientTag(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none"
-                >
-                  {CLIENT_TAGS.map((tag) => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <div>
+                  <label className="block font-label-sm text-label-sm text-secondary font-bold mb-1">
+                    Motivo Estadístico Principal
+                  </label>
+                  <select
+                    value={reportClientTag}
+                    onChange={(e) => setReportClientTag(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none"
+                  >
+                    {CLIENT_TAGS.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {reportClientTag === '✏️ Otro' && (
+                  <input
+                    type="text"
+                    value={customClientTag}
+                    onChange={(e) => setCustomClientTag(e.target.value)}
+                    placeholder="Escribí el motivo (Ej: Perro suelto, portón trabado, paga tarde...)"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none border border-indigo-300"
+                  />
+                )}
               </div>
             )}
 
@@ -2270,6 +2295,8 @@ export default function MapaPage() {
                 placeholder={
                   reportLayer === 'clientes'
                     ? 'Contá tu experiencia: timbre que no anda, teléfono alternativo, dónde esperar...'
+                    : reportLayer === 'controles'
+                    ? 'Detalle opcional (podés dejarlo vacío, o aclarar: grúa, alcoholemia, piden papeles...)'
                     : 'Detalle útil para quienes pasan por esta calle...'
                 }
                 className="w-full p-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none resize-none"
