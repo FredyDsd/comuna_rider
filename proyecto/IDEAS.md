@@ -5,3 +5,4 @@
 - **Resumen Semanal en Calculadora:** Gráfica compacta de ganancias netas acumuladas por semana y costo promedio por kilómetro recorrido.
 - **Confirmación de Expiración o Reactivación de Turnos:** Recordatorio visual automático en "Mis horarios" minutos antes de que venza el bloque publicado.
 - **Búsqueda de Alerta Cercana:** Indicador de distancia aproximada desde la ubicación GPS actual del rider hasta el pin de alerta en el mapa.
+
