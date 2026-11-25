@@ -28,6 +28,7 @@ comuna_rider/
 │   ├── context/
 │   │   └── AuthContext.jsx  # Sesión Supabase Auth, roles, compresión de avatar 360x360
 │   ├── lib/
+│   │   ├── sosUtils.js      # Utilidades SOS: parseo/vigencia, IDs vistos y WhatsApp
 │   │   └── supabase.js      # Cliente Supabase (.env o configuración en runtime)
 │   ├── pages/
 │   │   ├── MapaPage.jsx         # Mapa full-screen + bottom sheet + alertas 12h
@@ -53,10 +54,10 @@ comuna_rider/
 ## Módulos Implementados
 1. **Mapa de Alertas (`/`)** — Mapa Leaflet a pantalla completa con panel inferior deslizable de 3 estados, pines comunitarios en tiempo real (controles policiales, zonas rojas, badenes, lluvia, gomerías y SOS) y expiración automática a las 12 horas.
 2. **Tablón de Turnos (`/turnos`)** — Intercambio/cesión de turnos entre cadetes en tira única desplazable horizontalmente; oculta días pasados, habilita la semana siguiente los miércoles, requiere foto de perfil aprobada para publicar, permite publicar solo desde **Mis horarios** y toma el WhatsApp del perfil (`profiles.whatsapp`).
-3. **Novedades (`/novedades`, Nivel 2+)** — Reemplaza a la antigua Calculadora. Muestra arriba los avisos oficiales publicados únicamente por el Administrador (si no hay avisos vigentes, esa sección desaparece) y debajo hasta 7 noticias curadas (sin buscador ni filtros) vía `/api/noticias` con portada real (`og:image`), bajada (`og:description`), favicon del medio y enlace directo al portal.
+3. **Novedades (`/novedades`, Nivel 2+)** — Reemplaza a la antigua Calculadora. Muestra alertas SOS activas en tiempo real (`🚨 Alertas SOS en Vivo`), arriba los avisos oficiales publicados únicamente por el Administrador (si no hay avisos vigentes, esa sección desaparece) y debajo hasta 7 noticias curadas (sin buscador ni filtros) vía `/api/noticias` con portada real (`og:image`), bajada (`og:description`), favicon del medio y enlace directo al portal.
 4. **Feria «Mulitas emprendedoras» (`/directorio`, pestaña `"Feria"`)** — Marketplace exclusivo para la comunidad rider sin etiquetas de "Vendedor Confiable", con aviso previo de no responsabilidad antes de abrir WhatsApp, reportes comunitarios con bandera (`flag`) para revisión del Administrador y requisito de foto de perfil propia (`360x360`) aprobada para publicar (auto-aprobada si es `admin`).
 5. **Mi Perfil y Panel de Moderación (`/perfil`)** — Registro/login con Email o Google, edición de datos/WhatsApp, carga de foto de perfil con envío automático a revisión y panel administrativo con ampliación de fotos (Lightbox), aprobación N2/N3 y rechazo.
-6. **Botón SOS Global** — Botón circular rojo arrastrable por pantalla con persistencia de posición y oculto en `/perfil`.
+6. **Botón SOS Global y Ventana de Emergencia Única (Nivel 2+)** — Botón circular rojo arrastrable por pantalla (oculto en `/perfil`) y ventana emergente superpuesta por única vez con cierre manual ante cada nueva alerta SOS activa.
 
 ## Variables de Entorno
 ```

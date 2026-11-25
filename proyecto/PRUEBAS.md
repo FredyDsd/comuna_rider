@@ -37,3 +37,6 @@
   - Al publicar un aviso oficial, aparece destacado arriba del feed para todos los cadetes sin contaminar los pines del mapa.
 - **Novedades Automáticas con Preview Real (`/api/noticias`):**
   - Vista limpia sin buscador ni chips de filtro, mostrando un máximo de 7 tarjetas curadas con portada real (`og:image`), bajada (`og:description`), favicon/dominio del portal, enlace directo al medio y botón para compartir por WhatsApp.
+- **Alertas SOS en Novedades y Ventana Superpuesta (Nivel 2+):**
+  - Al lanzar una alerta SOS, aparece automáticamente en el bloque `🚨 Alertas SOS en Vivo` de `/novedades` con acciones `"Voy en camino"`, `"Ver Mapa"`, `"WhatsApp"` y `"Cerrar SOS"`.
+  - Se superpone una ventana modal global en toda la app únicamente para usuarios Nivel 2+ (`cadete_verificado`, `cadete_emprendedor`, `admin`); solo se cierra cuando el usuario presiona `"Cerrar"` (o navega a Mapa/Novedades) y no vuelve a mostrarse por segunda vez para esa misma alerta.

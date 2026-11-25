@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import JujuyMap, { JUJUY_MACRO_ZONES, JUJUY_ZONES_COORDS } from '../components/JujuyMap';
+import { LAST_LOCAL_SOS_KEY } from '../lib/sosUtils';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -1381,8 +1382,13 @@ export default function MapaPage() {
   }, [canUseCadeteTools, profile?.whatsapp, requestRealGpsLocation]);
 
   useEffect(() => {
-    if (location.state?.openSos && canUseCadeteTools) {
+    if (!canUseCadeteTools) return;
+    if (location.state?.openSos) {
       handleOpenSosModal();
+      navigate(location.pathname, { replace: true, state: {} });
+    } else if (Array.isArray(location.state?.focusSosCoords)) {
+      setActiveLayer('sos');
+      setSelectedSubzoneCoords(location.state.focusSosCoords);
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, location.pathname, canUseCadeteTools, handleOpenSosModal, navigate]);
@@ -1488,14 +1494,27 @@ export default function MapaPage() {
     };
 
     try {
+      let emittedSosPayload = {
+        id: `local-sos-${Date.now()}`,
+        ...newSosRow,
+        created_at: new Date().toISOString(),
+      };
+
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from('alerts').insert(newSosRow);
+        const { data: insertedRow, error } = await supabase
+          .from('alerts')
+          .insert(newSosRow)
+          .select()
+          .single();
         if (error) throw error;
+        if (insertedRow) {
+          emittedSosPayload = insertedRow;
+        }
         await fetchAlerts();
       } else {
         setDbItems((prev) => [
           {
-            id: `local-sos-${Date.now()}`,
+            id: emittedSosPayload.id,
             user_id: user.id,
             layer: 'sos',
             subType: 'sos',
@@ -1517,20 +1536,17 @@ export default function MapaPage() {
         ]);
       }
 
-      setLastSentSos({
-        title: sosTitle,
-        label: selectedSosOption.label,
-        note: sosNote.trim(),
-        phone: phoneToShare,
-        time: `${timeStr} hs`,
-        zone: resolvedAddress || `${selectedZone} (${selectedSubzone})`,
-        isRealGps,
-        lat: finalLat,
-        lng: finalLng,
-      });
+      try {
+        localStorage.setItem(LAST_LOCAL_SOS_KEY, JSON.stringify(emittedSosPayload));
+      } catch {
+        // Ignora error de storage
+      }
+      window.dispatchEvent(new CustomEvent('comuna-sos-emitted', { detail: emittedSosPayload }));
+
+      setLastSentSos(null);
+      setIsSosModalOpen(false);
       setActiveLayer('sos');
       setSelectedSubzoneCoords([finalLat, finalLng]);
-      setSheetHeightPx(getHalfSheetHeight());
     } catch (err) {
       alert(`No se pudo emitir la alerta SOS: ${err.message}`);
     } finally {

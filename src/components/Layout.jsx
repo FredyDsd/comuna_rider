@@ -3,6 +3,13 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Header from './Header';
 import BottomNav from './BottomNav';
 import { useAuth } from '../context/AuthContext';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  parseSosAlertRow,
+  getSeenSosIds,
+  markSosIdAsSeen,
+  buildSosShareWhatsappUrl,
+} from '../lib/sosUtils';
 
 const SOS_STORAGE_KEY = 'comuna_rider_sos_pos_v1';
 const SOS_BTN_SIZE = 48; // w-12 h-12
@@ -14,6 +21,7 @@ export default function Layout() {
 
   const shellRef = useRef(null);
   const [shellBounds, setShellBounds] = useState({ left: 0, width: 448 });
+  const [activeSosModal, setActiveSosModal] = useState(null);
 
   const getSafeDefaultPos = useCallback((width) => {
     const safeWidth = width || Math.min(window.innerWidth, 448);
@@ -84,6 +92,109 @@ export default function Layout() {
 
   const isMapRoute = location.pathname === '/' || location.pathname === '/mapa';
   const isProfileRoute = location.pathname.startsWith('/perfil');
+
+  const checkLatestUnseenSos = useCallback(async () => {
+    if (!canUseCadeteTools || !isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('alerts')
+        .select('*')
+        .eq('category', 'sos')
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (error || !data) return;
+      const seenIds = getSeenSosIds();
+      const firstUnseen = data
+        .map(parseSosAlertRow)
+        .filter(Boolean)
+        .find((sos) => !seenIds.includes(sos.id));
+
+      if (firstUnseen) {
+        setActiveSosModal(firstUnseen);
+      }
+    } catch (err) {
+      console.warn('Error verificando alertas SOS activas:', err);
+    }
+  }, [canUseCadeteTools]);
+
+  useEffect(() => {
+    if (!canUseCadeteTools) {
+      setActiveSosModal(null);
+      return;
+    }
+
+    checkLatestUnseenSos();
+
+    const handleLocalSosEmitted = (e) => {
+      const parsed = parseSosAlertRow(e.detail);
+      if (!parsed) return;
+      const seenIds = getSeenSosIds();
+      if (!seenIds.includes(parsed.id)) {
+        setActiveSosModal(parsed);
+      }
+    };
+
+    const handleSosResolved = (e) => {
+      const resolvedId = e.detail?.id;
+      if (resolvedId) {
+        markSosIdAsSeen(resolvedId);
+        setActiveSosModal((prev) => (prev?.id === resolvedId ? null : prev));
+      }
+    };
+
+    window.addEventListener('comuna-sos-emitted', handleLocalSosEmitted);
+    window.addEventListener('comuna-sos-resolved', handleSosResolved);
+
+    let channel = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
+        .channel('global:sos:popup')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'alerts' },
+          (payload) => {
+            const parsed = parseSosAlertRow(payload.new);
+            if (!parsed) return;
+            const seenIds = getSeenSosIds();
+            if (!seenIds.includes(parsed.id)) {
+              setActiveSosModal(parsed);
+              try {
+                navigator.vibrate?.([250, 120, 250]);
+              } catch {
+                // Ignora si no hay soporte de vibración
+              }
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'alerts' },
+          (payload) => {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setActiveSosModal((prev) => (prev?.id === deletedId ? null : prev));
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('comuna-sos-emitted', handleLocalSosEmitted);
+      window.removeEventListener('comuna-sos-resolved', handleSosResolved);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [canUseCadeteTools, checkLatestUnseenSos]);
+
+  const handleCloseSosModal = () => {
+    if (activeSosModal?.id) {
+      markSosIdAsSeen(activeSosModal.id);
+    }
+    setActiveSosModal(null);
+  };
 
   const triggerOpenSos = useCallback(() => {
     if (isMapRoute) {
@@ -226,6 +337,110 @@ export default function Layout() {
 
         <BottomNav />
       </div>
+
+      {/* VENTANA EMERGENTE SOS POR ÚNICA VEZ SUPERPUESTA A TODO (Exclusivo Nivel 2+) */}
+      {canUseCadeteTools && activeSosModal && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-surface-container-lowest rounded-3xl overflow-hidden shadow-2xl border-2 border-error animate-in zoom-in-95 duration-150">
+            <div className="bg-error text-on-error px-5 py-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 animate-pulse">
+                  <span className="material-symbols-outlined text-2xl">emergency</span>
+                </div>
+                <div className="min-w-0">
+                  <span className="font-label-sm text-[10px] uppercase tracking-wider font-black block opacity-90">
+                    Alerta SOS en Vivo • Nivel 2+
+                  </span>
+                  <h2 className="font-headline-md text-headline-md font-extrabold leading-tight truncate">
+                    {activeSosModal.badge}
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseSosModal}
+                aria-label="Cerrar alerta SOS"
+                className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5">
+              <div className="space-y-1">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold">
+                  {activeSosModal.title}
+                </h3>
+                <p className="font-body-md text-body-md text-on-surface/90 bg-error-container/30 p-3 rounded-xl border border-error/25">
+                  {activeSosModal.description}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 text-xs text-secondary font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-low">
+                  <span className="material-symbols-outlined text-sm text-primary">location_on</span>
+                  {activeSosModal.zone}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-low">
+                  <span className="material-symbols-outlined text-sm text-primary">schedule</span>
+                  {activeSosModal.time}
+                </span>
+                {activeSosModal.phone && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-container/15 text-tertiary font-bold">
+                    <span className="material-symbols-outlined text-sm">call</span>
+                    {activeSosModal.phone}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const coords = [activeSosModal.lat, activeSosModal.lng];
+                    handleCloseSosModal();
+                    navigate('/', { state: { focusSosCoords: coords } });
+                  }}
+                  className="h-11 rounded-xl bg-primary-container text-on-primary-container font-label-md text-xs font-extrabold flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">map</span>
+                  Ver en Mapa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseSosModal();
+                    navigate('/novedades');
+                  }}
+                  className="h-11 rounded-xl bg-surface-container text-on-surface font-label-md text-xs font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">newspaper</span>
+                  Ver en Novedades
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <a
+                  href={buildSosShareWhatsappUrl(activeSosModal)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 h-11 rounded-xl bg-tertiary-container text-on-tertiary-container font-label-md text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">chat</span>
+                  Pasar por WhatsApp
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCloseSosModal}
+                  className="px-6 h-11 rounded-xl bg-on-surface text-surface font-label-md text-xs font-extrabold active:scale-95"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

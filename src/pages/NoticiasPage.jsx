@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import {
+  parseSosAlertRow,
+  buildSosShareWhatsappUrl,
+  LAST_LOCAL_SOS_KEY,
+  markSosIdAsSeen,
+} from '../lib/sosUtils';
 
 const ADMIN_NOTICE_BADGE = '📢 Aviso Admin';
 const NEWS_CACHE_KEY = 'comuna_rider_news_cache_v2';
@@ -272,7 +279,12 @@ function NewsPortalCard({ item, onShare }) {
 }
 
 export default function NoticiasPage() {
-  const { user, profile, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, isAdmin, canUseCadeteTools } = useAuth();
+
+  // Alertas SOS activas (Nivel 2+)
+  const [sosAlerts, setSosAlerts] = useState([]);
+  const [helpingSosId, setHelpingSosId] = useState(null);
 
   // Avisos del Administrador
   const [announcements, setAnnouncements] = useState([]);
@@ -374,9 +386,57 @@ export default function NoticiasPage() {
     [newsItems.length, showToast]
   );
 
+  const fetchSosAlerts = useCallback(async () => {
+    if (!canUseCadeteTools) {
+      setSosAlerts([]);
+      return;
+    }
+
+    let list = [];
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('alerts')
+          .select('*')
+          .eq('category', 'sos')
+          .order('created_at', { ascending: false })
+          .limit(15);
+
+        if (!error && data) {
+          list = data.map(parseSosAlertRow).filter(Boolean);
+        }
+      } catch (err) {
+        console.warn('Error cargando alertas SOS en Novedades:', err);
+      }
+    } else {
+      try {
+        const rawLocal = localStorage.getItem(LAST_LOCAL_SOS_KEY);
+        if (rawLocal) {
+          const parsedLocal = parseSosAlertRow(JSON.parse(rawLocal));
+          if (parsedLocal) list = [parsedLocal];
+        }
+      } catch {
+        // Ignora error de storage
+      }
+    }
+
+    setSosAlerts(list);
+  }, [canUseCadeteTools]);
+
   useEffect(() => {
     fetchAnnouncements();
-  }, [fetchAnnouncements]);
+    fetchSosAlerts();
+  }, [fetchAnnouncements, fetchSosAlerts]);
+
+  useEffect(() => {
+    const onSosUpdate = () => fetchSosAlerts();
+    window.addEventListener('comuna-sos-emitted', onSosUpdate);
+    window.addEventListener('comuna-sos-resolved', onSosUpdate);
+    return () => {
+      window.removeEventListener('comuna-sos-emitted', onSosUpdate);
+      window.removeEventListener('comuna-sos-resolved', onSosUpdate);
+    };
+  }, [fetchSosAlerts]);
 
   useEffect(() => {
     const cached = readCachedNews();
@@ -397,12 +457,19 @@ export default function NoticiasPage() {
           fetchAnnouncements();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'alerts' },
+        () => {
+          fetchSosAlerts();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [noticeStorage, fetchAnnouncements]);
+  }, [noticeStorage, fetchAnnouncements, fetchSosAlerts]);
 
   const activeAnnouncements = useMemo(() => {
     const now = Date.now();
@@ -531,6 +598,65 @@ export default function NoticiasPage() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
+  const handleOfferSosHelp = async (sos) => {
+    if (!canUseCadeteTools || !user) return;
+    const helperName = profile?.full_name || user.email?.split('@')[0] || 'Compañero';
+    if (sos.helpers.includes(helperName)) return;
+    const nextHelpers = [...sos.helpers, helperName];
+    setHelpingSosId(sos.id);
+
+    try {
+      if (isSupabaseConfigured && !String(sos.id).startsWith('local-')) {
+        const updatedExtra = {
+          subType: 'sos',
+          urgency: sos.urgency,
+          phone: sos.phone,
+          eventTime: sos.time,
+          address: sos.zone,
+          isRealGps: sos.isRealGps,
+          helpers: nextHelpers,
+          expiresAt: sos.expiresAt,
+        };
+        await supabase
+          .from('alerts')
+          .update({
+            confirm_count: (sos.confirmCount || 1) + 1,
+            extra: JSON.stringify(updatedExtra),
+          })
+          .eq('id', sos.id);
+      }
+      setSosAlerts((prev) =>
+        prev.map((item) => (item.id === sos.id ? { ...item, helpers: nextHelpers } : item))
+      );
+      showToast('🤝 Avisado al compañero que vas en camino.');
+    } catch (err) {
+      showToast(`No se pudo registrar asistencia: ${err.message}`);
+    } finally {
+      setHelpingSosId(null);
+    }
+  };
+
+  const handleResolveSos = async (sos) => {
+    if (!user || (sos.user_id !== user.id && !isAdmin)) return;
+    try {
+      if (isSupabaseConfigured && !String(sos.id).startsWith('local-')) {
+        const { error } = await supabase.from('alerts').delete().eq('id', sos.id);
+        if (error) throw error;
+      }
+      markSosIdAsSeen(sos.id);
+      try {
+        localStorage.removeItem(LAST_LOCAL_SOS_KEY);
+      } catch {
+        // Ignora error de storage
+      }
+      setSosAlerts((prev) => prev.filter((item) => item.id !== sos.id));
+      window.dispatchEvent(new CustomEvent('comuna-sos-resolved', { detail: { id: sos.id } }));
+      showToast('✅ Alerta SOS cerrada.');
+    } catch (err) {
+      showToast(`No se pudo cerrar el SOS: ${err.message}`);
+    }
+  };
+
   return (
     <div className="py-space-md flex flex-col gap-space-md pb-6">
       {/* Toast flotante */}
@@ -589,6 +715,122 @@ export default function NoticiasPage() {
           )}
         </div>
       </section>
+
+      {/* ALERTAS SOS EN VIVO — visible para Nivel 2+ cuando hay emergencias activas */}
+      {canUseCadeteTools && sosAlerts.length > 0 && (
+        <section aria-label="Alertas SOS en Vivo" className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-error text-lg animate-pulse">
+                emergency
+              </span>
+              <h2 className="font-label-lg text-label-lg text-error uppercase tracking-wide font-extrabold">
+                🚨 Alertas SOS en Vivo
+              </h2>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-error text-on-error font-label-sm text-label-sm font-extrabold">
+              {sosAlerts.length} {sosAlerts.length === 1 ? 'activa' : 'activas'}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {sosAlerts.map((sos) => {
+              const myName = profile?.full_name || user?.email?.split('@')[0] || 'Compañero';
+              const alreadyHelping = sos.helpers.includes(myName);
+              const canClose = Boolean(user && (sos.user_id === user.id || isAdmin));
+
+              return (
+                <article
+                  key={sos.id}
+                  className="relative overflow-hidden rounded-2xl border-2 border-error bg-error-container/30 p-4 shadow-md"
+                >
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-error text-on-error font-label-sm text-[10px] font-extrabold uppercase">
+                        <span className="material-symbols-outlined text-xs">emergency</span>
+                        {sos.badge}
+                      </span>
+                      <span className="font-body-sm text-[11px] text-secondary font-bold">
+                        {sos.time}
+                      </span>
+                    </div>
+
+                    <h3 className="font-label-lg text-[15px] text-on-surface font-extrabold leading-snug">
+                      {sos.title}
+                    </h3>
+
+                    <p className="font-body-sm text-body-sm text-on-surface/90">
+                      {sos.description}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-secondary font-semibold">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs text-error">
+                          location_on
+                        </span>
+                        {sos.zone}
+                      </span>
+                      {sos.helpers.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-tertiary font-extrabold">
+                          • 🤝 {sos.helpers.length} en camino ({sos.helpers.join(', ')})
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={alreadyHelping || helpingSosId === sos.id}
+                        onClick={() => handleOfferSosHelp(sos)}
+                        className={`h-9 px-3 rounded-xl font-label-sm text-xs font-extrabold flex items-center gap-1 transition-all ${
+                          alreadyHelping
+                            ? 'bg-tertiary-container text-on-tertiary-container opacity-90'
+                            : 'bg-error text-on-error shadow-sm active:scale-95'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">handshake</span>
+                        {alreadyHelping ? 'Ya avisaste' : 'Voy en camino'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate('/', { state: { focusSosCoords: [sos.lat, sos.lng] } })
+                        }
+                        className="h-9 px-3 rounded-xl bg-surface-container-lowest border border-surface-container text-on-surface font-label-sm text-xs font-extrabold flex items-center gap-1 active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-sm text-primary">map</span>
+                        Ver Mapa
+                      </button>
+
+                      <a
+                        href={buildSosShareWhatsappUrl(sos)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-9 px-3 rounded-xl bg-tertiary-container text-on-tertiary-container font-label-sm text-xs font-extrabold flex items-center gap-1 active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-sm">chat</span>
+                        WhatsApp
+                      </a>
+
+                      {canClose && (
+                        <button
+                          type="button"
+                          onClick={() => handleResolveSos(sos)}
+                          className="h-9 px-3 rounded-xl bg-surface-container text-on-surface font-label-sm text-xs font-bold flex items-center gap-1 active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          Cerrar SOS
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* AVISOS DEL ADMIN — solo se renderiza si hay al menos un aviso activo */}
       {activeAnnouncements.length > 0 && (

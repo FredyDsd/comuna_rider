@@ -62,7 +62,8 @@
 
 ---
 
-### ✅ Fase 7 - Reemplazo de Calculadora por Novedades (COMPLETADA)
+### ✅ Fase 7 - Reemplazo de Calculadora por Novedades y Alertas SOS Globales (COMPLETADA)
 - **Eliminación de Calculadora:** Se removió `CalculadoraPage.jsx`, se reemplazó la pestaña inferior por **Novedades** (`/novedades`, Nivel 2+) y se agregaron redirecciones desde `/calculadora` y `/noticias` hacia `/novedades`.
 - **Novedades Curadas con Preview Real (`api/noticias.js`):** Función serverless en Vercel (y middleware local en `vite.config.js`) que obtiene hasta 7 noticias balanceadas (delivery de plataformas, nafta en surtidor sin spam bursátil y Jujuy), decodifica la URL directa del portal y extrae `og:image`, `og:description` y favicon con caché CDN de 30 minutos.
 - **UI Limpia + Avisos Oficiales del Admin (`src/pages/NoticiasPage.jsx` + `supabase/schema.sql`):** Sin buscador ni filtros; los avisos creados por el Administrador aparecen arriba destacados y se ocultan por completo si no hay avisos vigentes, dejando tarjetas editoriales con foto real y bajada de cada portal.
+- **Alertas SOS en Novedades + Ventana Superpuesta por Única Vez (`Layout.jsx`, `NoticiasPage.jsx`, `MapaPage.jsx`, `sosUtils.js`):** Al emitir un SOS, aparece destacado en tiempo real dentro de `/novedades` y dispara una ventana emergente global por única vez (exclusiva Nivel 2+) que solo se cierra cuando el usuario pulsa `"Cerrar"` o navega a verla.
