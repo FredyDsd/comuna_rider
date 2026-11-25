@@ -127,6 +127,8 @@ export default function DirectorioPage() {
 
   const [toastMessage, setToastMessage] = useState(null);
   const [marketplaceItems, setMarketplaceItems] = useState(INITIAL_FERIA);
+  const [pendingPhotoRequests, setPendingPhotoRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   const hasCustomPhoto = hasCustomProfilePhoto(profile);
 
@@ -180,8 +182,40 @@ export default function DirectorioPage() {
     }
   }, []);
 
+  const fetchPendingPhotoRequests = useCallback(async () => {
+    if (!isSupabaseConfigured || !isAdmin) {
+      setPendingPhotoRequests([]);
+      return;
+    }
+    setLoadingRequests(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('verification_requested_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        const pending = data.filter(
+          (p) =>
+            p.role !== 'admin' &&
+            (p.verification_status === 'pending' ||
+              (hasCustomProfilePhoto(p) &&
+                p.role !== 'cadete_emprendedor' &&
+                p.verification_status !== 'rejected'))
+        );
+        setPendingPhotoRequests(pending);
+      }
+    } catch (err) {
+      console.warn('Error cargando solicitudes de foto en Feria:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     fetchFeriaItems();
+    fetchPendingPhotoRequests();
 
     if (!isSupabaseConfigured) return;
     const channel = supabase
@@ -194,7 +228,37 @@ export default function DirectorioPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchFeriaItems]);
+  }, [fetchFeriaItems, fetchPendingPhotoRequests]);
+
+  const handleAdminPhotoDecision = async (reqUser, approve) => {
+    if (!isAdmin || !isSupabaseConfigured) return;
+    try {
+      const updates = approve
+        ? {
+            role: 'cadete_emprendedor',
+            verification_status: 'approved',
+            is_banned: false,
+            updated_at: new Date().toISOString(),
+          }
+        : {
+            avatar_url: DEFAULT_AVATAR_URL,
+            verification_status: 'rejected',
+            updated_at: new Date().toISOString(),
+          };
+
+      const { error } = await supabase.from('profiles').update(updates).eq('id', reqUser.id);
+      if (error) throw error;
+
+      setPendingPhotoRequests((prev) => prev.filter((p) => p.id !== reqUser.id));
+      showToast(
+        approve
+          ? `✅ ${reqUser.full_name || reqUser.email} aprobado para publicar en Feria (N3).`
+          : `❌ Foto de ${reqUser.full_name || reqUser.email} rechazada.`
+      );
+    } catch (err) {
+      alert(`No se pudo procesar la solicitud: ${err.message}`);
+    }
+  };
 
   const handleOpenPublishClick = () => {
     if (!user) {
@@ -230,9 +294,14 @@ export default function DirectorioPage() {
       const compressedDataUrl = await compressAvatarFile(file);
       await updateProfile({
         avatar_url: compressedDataUrl,
-        ...(isAdmin ? { verification_status: 'approved' } : {}),
+        verification_status: isAdmin ? 'approved' : 'pending',
+        verification_requested_at: new Date().toISOString(),
       });
-      showToast('📸 Foto de perfil propia guardada en Supabase.');
+      showToast(
+        isAdmin
+          ? '📸 Foto de perfil propia guardada en Supabase.'
+          : '📸 Foto enviada automáticamente al Administrador para aprobar tu permiso de Feria.'
+      );
       if (isAdmin) {
         setIsRequirementsModalOpen(false);
         setItemTitle('');
@@ -495,6 +564,94 @@ export default function DirectorioPage() {
           ? 'Publicar (Requiere Foto de Perfil + Aprobación)'
           : 'Publicar en Mulitas Emprendedoras'}
       </button>
+
+      {/* TARJETA ADMIN: Solicitudes de Foto de Perfil para Publicar en Feria */}
+      {isAdmin && pendingPhotoRequests.length > 0 && (
+        <section className="bg-surface-container-lowest rounded-xl p-space-md shadow-md border-2 border-primary-container space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-primary-container text-xl">
+                admin_panel_settings
+              </span>
+              <h2 className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                🛡️ Solicitudes para Publicar en Feria ({pendingPhotoRequests.length})
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={fetchPendingPhotoRequests}
+              className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0"
+              title="Actualizar solicitudes"
+            >
+              <span
+                className={`material-symbols-outlined text-base ${
+                  loadingRequests ? 'animate-spin' : ''
+                }`}
+              >
+                refresh
+              </span>
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {pendingPhotoRequests.map((reqUser) => {
+              const reqHasPhoto = hasCustomProfilePhoto(reqUser);
+              return (
+                <div
+                  key={reqUser.id}
+                  className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high space-y-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
+                      alt={reqUser.full_name || 'Solicitante'}
+                      className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow-sm flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                        {reqUser.full_name || 'Sin nombre'}
+                      </p>
+                      <p className="font-body-sm text-[11px] text-secondary truncate">
+                        {reqUser.email} {reqUser.whatsapp ? `• ${reqUser.whatsapp}` : ''}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
+                          reqHasPhoto
+                            ? 'bg-tertiary-container/20 text-tertiary'
+                            : 'bg-amber-300/70 text-amber-950'
+                        }`}
+                      >
+                        {reqHasPhoto
+                          ? '📸 Foto de perfil propia'
+                          : '⚠️ Tiene foto por defecto'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAdminPhotoDecision(reqUser, true)}
+                      className="h-9 rounded-lg bg-tertiary-container text-on-tertiary-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-sm">check_circle</span>
+                      Aprobar Foto y Habilitar (N3)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAdminPhotoDecision(reqUser, false)}
+                      className="h-9 rounded-lg bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                      Rechazar Foto
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Feed Exclusivo de la Feria Rider */}
       {filteredFeria.length === 0 ? (

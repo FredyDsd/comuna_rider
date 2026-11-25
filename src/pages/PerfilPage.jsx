@@ -261,9 +261,14 @@ export default function PerfilPage() {
       const compressedDataUrl = await compressAvatarFile(file);
       await updateProfile({
         avatar_url: compressedDataUrl,
-        ...(isAdmin ? { verification_status: 'approved' } : {}),
+        verification_status: isAdmin ? 'approved' : 'pending',
+        verification_requested_at: new Date().toISOString(),
       });
-      setFeedback('📸 Foto de perfil propia guardada en Supabase.');
+      setFeedback(
+        isAdmin
+          ? '📸 Foto de perfil propia guardada en Supabase.'
+          : '📸 Foto de perfil cargada y enviada automáticamente a revisión del Administrador.'
+      );
     } catch (err) {
       setErrorMsg(err.message || 'No se pudo cargar tu foto de perfil.');
     } finally {
@@ -311,7 +316,14 @@ export default function PerfilPage() {
     }
   };
 
-  const pendingRequests = modProfiles.filter((p) => p.verification_status === 'pending');
+  const pendingRequests = modProfiles.filter(
+    (p) =>
+      p.verification_status === 'pending' ||
+      (hasCustomProfilePhoto(p) &&
+        p.role !== 'cadete_emprendedor' &&
+        p.role !== 'admin' &&
+        p.verification_status !== 'rejected')
+  );
   const filteredModProfiles = modProfiles.filter((p) => {
     if (!modSearch.trim()) return true;
     const q = modSearch.toLowerCase();
@@ -905,16 +917,34 @@ export default function PerfilPage() {
                           }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
-                              {u.full_name || 'Usuario'}{' '}
-                              {u.is_banned && (
-                                <span className="text-error font-extrabold">(BANEADO)</span>
-                              )}
-                            </p>
-                            <p className="font-body-sm text-[11px] text-secondary truncate">
-                              {u.email} {u.whatsapp ? `• ${u.whatsapp}` : ''}
-                            </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img
+                              src={u.avatar_url || DEFAULT_AVATAR_URL}
+                              alt={u.full_name || 'Usuario'}
+                              className="w-10 h-10 rounded-full object-cover border border-surface-container-high flex-shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
+                                  {u.full_name || 'Usuario'}{' '}
+                                  {u.is_banned && (
+                                    <span className="text-error font-extrabold">(BANEADO)</span>
+                                  )}
+                                </p>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded-full font-label-sm text-[9px] font-extrabold ${
+                                    hasCustomProfilePhoto(u)
+                                      ? 'bg-tertiary-container/20 text-tertiary'
+                                      : 'bg-surface-container text-secondary'
+                                  }`}
+                                >
+                                  {hasCustomProfilePhoto(u) ? '📸 Foto propia' : 'Foto por defecto'}
+                                </span>
+                              </div>
+                              <p className="font-body-sm text-[11px] text-secondary truncate">
+                                {u.email} {u.whatsapp ? `• ${u.whatsapp}` : ''}
+                              </p>
+                            </div>
                           </div>
                           <button
                             type="button"

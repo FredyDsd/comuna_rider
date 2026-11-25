@@ -27,8 +27,8 @@ export default function BottomNav() {
         },
         {
           to: '/directorio',
-          label: 'Directorio',
-          icon: 'handyman',
+          label: 'Feria',
+          icon: 'storefront',
           badge: null,
         },
         ...(isAdmin
@@ -51,8 +51,8 @@ export default function BottomNav() {
         },
         {
           to: '/directorio',
-          label: 'Directorio',
-          icon: 'handyman',
+          label: 'Feria',
+          icon: 'storefront',
           badge: null,
         },
         {
