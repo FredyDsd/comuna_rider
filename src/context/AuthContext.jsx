@@ -372,14 +372,15 @@ export function AuthProvider({ children }) {
   // Compatibilidad con TurnosPage / Layout
   const canWriteMapAndShifts = canUseCadeteTools;
 
-  // 3. Publicar ventas en Mulitas Emprendedoras: exige foto de perfil propia cargada + aprobación del Admin (Nivel 3) o ser Admin
+  // 3. Publicar ventas en Mulitas Emprendedoras:
+  //    - Admin: requiere solo foto de perfil propia cargada (sin aprobación previa)
+  //    - Emprendedor (Nivel 3): requiere foto de perfil propia cargada + aprobación del Admin
   const canPublishFeria = Boolean(
     user &&
       !isBanned &&
+      hasCustomPhoto &&
       (role === 'admin' ||
-        (role === 'cadete_emprendedor' &&
-          hasCustomPhoto &&
-          profile?.verification_status === 'approved'))
+        (role === 'cadete_emprendedor' && profile?.verification_status === 'approved'))
   );
 
   // 4. Moderador (Nivel 4): aprueba solicitudes, borra alertas y banea

@@ -228,8 +228,19 @@ export default function DirectorioPage() {
     setUploadingAvatar(true);
     try {
       const compressedDataUrl = await compressAvatarFile(file);
-      await updateProfile({ avatar_url: compressedDataUrl });
+      await updateProfile({
+        avatar_url: compressedDataUrl,
+        ...(isAdmin ? { verification_status: 'approved' } : {}),
+      });
       showToast('📸 Foto de perfil propia guardada en Supabase.');
+      if (isAdmin) {
+        setIsRequirementsModalOpen(false);
+        setItemTitle('');
+        setItemSubtitle('Excelente estado • Entrega en mano');
+        setCustomProductImage('');
+        setItemPhone(profile?.whatsapp || '+54 9 388 ');
+        setIsPublishModalOpen(true);
+      }
     } catch (err) {
       setReqError(err.message || 'No se pudo cargar tu foto de perfil.');
     } finally {
@@ -640,6 +651,8 @@ export default function DirectorioPage() {
                   <p className="font-body-sm text-[12px] text-secondary leading-snug">
                     {hasCustomPhoto
                       ? 'Ya cargaste tu foto propia para que los compañeros te reconozcan.'
+                      : isAdmin
+                      ? 'Como Administrador no necesitás aprobación previa: apenas cargues tu foto real ya podés publicar.'
                       : 'Tu cuenta tiene la foto por defecto. Cargá tu foto real antes de pedir permiso al administrador.'}
                   </p>
                   <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm font-extrabold cursor-pointer active:scale-95">
@@ -657,56 +670,65 @@ export default function DirectorioPage() {
               </div>
             </div>
 
-            {/* Paso 2: Aprobación del Administrador (Nivel 3) */}
-            <div
-              className={`p-3.5 rounded-xl border space-y-2.5 ${
-                role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
-                  ? 'bg-tertiary-container/10 border-tertiary/40'
-                  : 'bg-surface-container-low border-surface-container-high'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-label-md text-label-md font-extrabold text-on-surface">
-                  2. Aprobación del Administrador
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-surface-container text-secondary font-label-sm text-[10px] font-extrabold">
-                  {profile?.verification_status === 'pending'
-                    ? '⏳ En revisión'
-                    : role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
-                    ? '✅ Aprobado'
-                    : 'Pendiente'}
+            {/* Paso 2: Aprobación del Administrador (Solo para usuarios no Admin) */}
+            {isAdmin ? (
+              <div className="p-3 rounded-xl bg-tertiary-container/15 border border-tertiary/30 font-body-sm text-body-sm text-tertiary font-bold flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
+                <span>
+                  Rol Administrador: quedás habilitado automáticamente apenas subas tu foto de perfil.
                 </span>
               </div>
+            ) : (
+              <div
+                className={`p-3.5 rounded-xl border space-y-2.5 ${
+                  role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
+                    ? 'bg-tertiary-container/10 border-tertiary/40'
+                    : 'bg-surface-container-low border-surface-container-high'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-label-md text-label-md font-extrabold text-on-surface">
+                    2. Aprobación del Administrador
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-surface-container text-secondary font-label-sm text-[10px] font-extrabold">
+                    {profile?.verification_status === 'pending'
+                      ? '⏳ En revisión'
+                      : role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
+                      ? '✅ Aprobado'
+                      : 'Pendiente'}
+                  </span>
+                </div>
 
-              {profile?.verification_status === 'pending' ? (
-                <p className="font-body-sm text-body-sm text-secondary">
-                  Tu solicitud ya está en el Panel de Moderación. Un administrador verificará tu foto
-                  de perfil y te habilitará el permiso de vendedor (Nivel 3).
-                </p>
-              ) : (
-                <>
+                {profile?.verification_status === 'pending' ? (
                   <p className="font-body-sm text-body-sm text-secondary">
-                    Un administrador debe revisar tu perfil y aprobar tu permiso para publicar en{' '}
-                    <strong>Mulitas Emprendedoras</strong>.
+                    Tu solicitud ya está en el Panel de Moderación. Un administrador verificará tu foto
+                    de perfil y te habilitará el permiso de vendedor (Nivel 3).
                   </p>
-                  <button
-                    type="button"
-                    disabled={!hasCustomPhoto || requestingApproval}
-                    onClick={handleRequestAdminApproval}
-                    className={`w-full h-11 rounded-full font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                      hasCustomPhoto
-                        ? 'bg-primary-container text-on-primary-container shadow-md active:scale-95'
-                        : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base">send</span>
-                    {requestingApproval
-                      ? 'Enviando al Admin...'
-                      : 'Solicitar Aprobación al Admin'}
-                  </button>
-                </>
-              )}
-            </div>
+                ) : (
+                  <>
+                    <p className="font-body-sm text-body-sm text-secondary">
+                      Un administrador debe revisar tu perfil y aprobar tu permiso para publicar en{' '}
+                      <strong>Mulitas Emprendedoras</strong>.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={!hasCustomPhoto || requestingApproval}
+                      onClick={handleRequestAdminApproval}
+                      className={`w-full h-11 rounded-full font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+                        hasCustomPhoto
+                          ? 'bg-primary-container text-on-primary-container shadow-md active:scale-95'
+                          : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">send</span>
+                      {requestingApproval
+                        ? 'Enviando al Admin...'
+                        : 'Solicitar Aprobación al Admin'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -259,7 +259,10 @@ export default function PerfilPage() {
     setUploadingAvatar(true);
     try {
       const compressedDataUrl = await compressAvatarFile(file);
-      await updateProfile({ avatar_url: compressedDataUrl });
+      await updateProfile({
+        avatar_url: compressedDataUrl,
+        ...(isAdmin ? { verification_status: 'approved' } : {}),
+      });
       setFeedback('📸 Foto de perfil propia guardada en Supabase.');
     } catch (err) {
       setErrorMsg(err.message || 'No se pudo cargar tu foto de perfil.');
@@ -421,11 +424,10 @@ export default function PerfilPage() {
                 setAuthMode('login');
                 setErrorMsg(null);
               }}
-              className={`h-10 rounded-full font-label-md text-label-md font-bold transition-all ${
-                authMode === 'login'
+              className={`h-10 rounded-full font-label-md text-label-md font-bold transition-all ${authMode === 'login'
                   ? 'bg-primary-container text-on-primary-container shadow-sm'
                   : 'text-secondary'
-              }`}
+                }`}
             >
               Iniciar Sesión
             </button>
@@ -435,11 +437,10 @@ export default function PerfilPage() {
                 setAuthMode('register');
                 setErrorMsg(null);
               }}
-              className={`h-10 rounded-full font-label-md text-label-md font-bold transition-all ${
-                authMode === 'register'
+              className={`h-10 rounded-full font-label-md text-label-md font-bold transition-all ${authMode === 'register'
                   ? 'bg-primary-container text-on-primary-container shadow-sm'
                   : 'text-secondary'
-              }`}
+                }`}
             >
               Registrarse
             </button>
@@ -547,8 +548,8 @@ export default function PerfilPage() {
               {submitting
                 ? 'Procesando...'
                 : authMode === 'register'
-                ? 'Crear Cuenta (Nivel 1 Ciudadano)'
-                : 'Ingresar con Email'}
+                  ? 'Crear Cuenta (Nivel 1 Ciudadano)'
+                  : 'Ingresar con Email'}
             </button>
           </form>
 
@@ -671,8 +672,8 @@ export default function PerfilPage() {
                   {submitting
                     ? 'Enviando solicitud...'
                     : profile?.verification_status === 'pending'
-                    ? 'Actualizar WhatsApp de Solicitud'
-                    : 'Solicitar Verificación de Cadete (Nivel 2)'}
+                      ? 'Actualizar WhatsApp de Solicitud'
+                      : 'Solicitar Verificación de Cadete (Nivel 2)'}
                 </button>
               </form>
             </div>
@@ -702,9 +703,8 @@ export default function PerfilPage() {
                   title="Actualizar solicitudes"
                 >
                   <span
-                    className={`material-symbols-outlined text-lg ${
-                      modLoading ? 'animate-spin' : ''
-                    }`}
+                    className={`material-symbols-outlined text-lg ${modLoading ? 'animate-spin' : ''
+                      }`}
                   >
                     refresh
                   </span>
@@ -716,11 +716,10 @@ export default function PerfilPage() {
                 <button
                   type="button"
                   onClick={() => setModTab('pending')}
-                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${
-                    modTab === 'pending'
+                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${modTab === 'pending'
                       ? 'bg-primary-container text-on-primary-container shadow-xs'
                       : 'text-secondary'
-                  }`}
+                    }`}
                 >
                   <span>Solicitudes</span>
                   <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px]">
@@ -730,22 +729,20 @@ export default function PerfilPage() {
                 <button
                   type="button"
                   onClick={() => setModTab('users')}
-                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${
-                    modTab === 'users'
+                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${modTab === 'users'
                       ? 'bg-primary-container text-on-primary-container shadow-xs'
                       : 'text-secondary'
-                  }`}
+                    }`}
                 >
                   <span>Usuarios ({modProfiles.length})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setModTab('alerts')}
-                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${
-                    modTab === 'alerts'
+                  className={`py-2 px-2 rounded-lg font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 transition-all ${modTab === 'alerts'
                       ? 'bg-primary-container text-on-primary-container shadow-xs'
                       : 'text-secondary'
-                  }`}
+                    }`}
                 >
                   <span>Alertas ({modAlerts.length})</span>
                 </button>
@@ -798,11 +795,10 @@ export default function PerfilPage() {
                                   📱 WhatsApp: {reqUser.whatsapp || 'No especificado'}
                                 </p>
                                 <span
-                                  className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
-                                    reqHasCustomPhoto
+                                  className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${reqHasCustomPhoto
                                       ? 'bg-tertiary-container/20 text-tertiary'
                                       : 'bg-amber-300/60 text-amber-950'
-                                  }`}
+                                    }`}
                                 >
                                   {reqHasCustomPhoto
                                     ? '📸 Foto de perfil cargada'
@@ -903,11 +899,10 @@ export default function PerfilPage() {
                     {filteredModProfiles.map((u) => (
                       <div
                         key={u.id}
-                        className={`p-2.5 rounded-xl border space-y-2 ${
-                          u.is_banned
+                        className={`p-2.5 rounded-xl border space-y-2 ${u.is_banned
                             ? 'bg-error-container/30 border-error'
                             : 'bg-surface-container-low border-surface-container-high'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
@@ -932,11 +927,10 @@ export default function PerfilPage() {
                                   : `🚫 Usuario ${u.full_name || u.email} baneado.`
                               )
                             }
-                            className={`px-2.5 py-1 rounded-full font-label-sm text-[10px] font-extrabold flex-shrink-0 ${
-                              u.is_banned
+                            className={`px-2.5 py-1 rounded-full font-label-sm text-[10px] font-extrabold flex-shrink-0 ${u.is_banned
                                 ? 'bg-tertiary-container text-on-tertiary-container'
                                 : 'bg-error-container text-on-error-container'
-                            }`}
+                              }`}
                           >
                             {u.is_banned ? 'Desbanear' : 'Banear'}
                           </button>
@@ -1041,11 +1035,10 @@ export default function PerfilPage() {
               />
               <div className="flex-1 min-w-0 space-y-1">
                 <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
-                    hasCustomPhoto
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${hasCustomPhoto
                       ? 'bg-tertiary-container/20 text-tertiary'
                       : 'bg-amber-300/70 text-amber-950'
-                  }`}
+                    }`}
                 >
                   {hasCustomPhoto ? '📸 Foto propia cargada' : '🖼️ Foto por defecto'}
                 </span>
@@ -1066,7 +1059,7 @@ export default function PerfilPage() {
               </div>
             </div>
 
-            {!canPublishFeria && (
+            {!canPublishFeria && !isAdmin && (
               <div className="p-3 rounded-xl bg-primary-fixed/30 border border-primary/25 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-label-sm text-label-sm font-extrabold text-on-surface">
@@ -1084,11 +1077,10 @@ export default function PerfilPage() {
                     type="button"
                     disabled={!hasCustomPhoto || submitting}
                     onClick={handleRequestFeriaPermission}
-                    className={`w-full h-10 rounded-full font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1.5 ${
-                      hasCustomPhoto
+                    className={`w-full h-10 rounded-full font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1.5 ${hasCustomPhoto
                         ? 'bg-primary-container text-on-primary-container shadow-sm active:scale-95'
                         : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-base">storefront</span>
                     Solicitar Aprobación para Feria (Nivel 3)
@@ -1107,11 +1099,10 @@ export default function PerfilPage() {
                   <button
                     type="button"
                     onClick={() => setStatus('online')}
-                    className={`h-11 rounded-full font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      status === 'online'
+                    className={`h-11 rounded-full font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 transition-all ${status === 'online'
                         ? 'bg-tertiary-container text-on-tertiary-container shadow-sm'
                         : 'bg-surface-container-low text-secondary'
-                    }`}
+                      }`}
                   >
                     <span className="w-2 h-2 rounded-full bg-current"></span>
                     Disponible (En Ruta)
@@ -1119,11 +1110,10 @@ export default function PerfilPage() {
                   <button
                     type="button"
                     onClick={() => setStatus('paused')}
-                    className={`h-11 rounded-full font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      status === 'paused'
+                    className={`h-11 rounded-full font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 transition-all ${status === 'paused'
                         ? 'bg-inverse-surface text-inverse-on-surface shadow-sm'
                         : 'bg-surface-container-low text-secondary'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-sm">pause_circle</span>
                     En Pausa
@@ -1229,11 +1219,10 @@ export default function PerfilPage() {
                   key={item.code}
                   type="button"
                   onClick={() => handleQuickRoleSwitch(item.code)}
-                  className={`h-9 px-2.5 rounded-lg font-label-sm text-label-sm font-bold transition-all ${
-                    role === item.code
+                  className={`h-9 px-2.5 rounded-lg font-label-sm text-label-sm font-bold transition-all ${role === item.code
                       ? 'bg-primary-container text-on-primary-container font-extrabold shadow-xs'
                       : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
-                  }`}
+                    }`}
                 >
                   {item.label}
                 </button>
@@ -1258,11 +1247,10 @@ export default function PerfilPage() {
             return (
               <div
                 key={r.code}
-                className={`p-2.5 rounded-lg border ${
-                  isCurrent
+                className={`p-2.5 rounded-lg border ${isCurrent
                     ? 'bg-primary-fixed/30 border-primary-container'
                     : 'bg-surface-container-low/60 border-transparent'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-label-md text-label-md text-on-surface font-bold">
@@ -1286,9 +1274,8 @@ export default function PerfilPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isSupabaseConfigured ? 'bg-tertiary animate-pulse' : 'bg-amber-500'
-              }`}
+              className={`w-2.5 h-2.5 rounded-full ${isSupabaseConfigured ? 'bg-tertiary animate-pulse' : 'bg-amber-500'
+                }`}
             ></span>
             <span className="font-label-md text-label-md text-on-surface font-bold">
               {isSupabaseConfigured ? 'Supabase Conectado' : 'Configuración Supabase Pendiente'}
