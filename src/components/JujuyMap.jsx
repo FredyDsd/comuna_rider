@@ -489,7 +489,7 @@ export default function JujuyMap({
 
       {/* Barra Flotante sobre el Mapa cuando se está arrastrando el pin para Agregar Alerta */}
       {isPlacingPin && (
-        <div className="absolute top-28 left-3 right-3 z-[450] flex items-center justify-between gap-2 pointer-events-none animate-in fade-in duration-150">
+        <div className="absolute top-3 left-3 right-3 z-[450] flex items-center justify-between gap-2 pointer-events-none animate-in fade-in duration-150">
           <div className="pointer-events-auto w-full bg-inverse-surface/95 text-inverse-on-surface px-3.5 py-2.5 rounded-2xl shadow-xl flex items-center justify-between gap-2 border border-white/10">
             <div className="min-w-0">
               <span className="font-label-sm text-label-sm text-tertiary-fixed block uppercase font-extrabold">

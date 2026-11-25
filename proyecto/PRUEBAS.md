@@ -4,10 +4,10 @@
 - **Prueba Fase 0:** El proyecto compila sin errores (`npm run build`) y la conexión a Supabase está inicializada (`src/lib/supabase.js`).
 - **Prueba Fase 1:** La aplicación se adapta a vista móvil sin recargar la página al navegar entre `Mapa`, `Turnos`, `Noticias`, `Feria` y `Perfil`.
 - **Prueba Fase 2:** Un usuario puede registrarse dejando guardado su perfil (incluyendo `whatsapp` y `DEFAULT_AVATAR_URL`) en `public.profiles` con rol inicial `ciudadano`.
-- **Prueba Fase 3:** El mapa Leaflet se muestra a pantalla completa con bottom sheet de 3 niveles; al cambiar de capa (`Controles`, `Calles`, `Gomerías`, etc.) o publicar una alerta, la barra inferior se mantiene abajo y solo sube si el usuario la arrastra o pulsa `"Subir barra ↑"`; un usuario autenticado puede agregar/borrar pines vinculados a su `user_id` y las alertas expiran tras 12 horas.
+- **Prueba Fase 3:** El mapa Leaflet se muestra a pantalla completa con bottom sheet de 3 niveles; al cambiar de capa (`Controles`, `Calles`, `Gomerías`, etc.) o publicar una alerta, la barra inferior se mantiene abajo y solo sube si el usuario la arrastra o pulsa `"Subir barra ↑"`; al tocar **"Agregar Alerta"**, se ocultan el radar de zonas y el clima dejando visible el aviso de arrastrar el pin en la parte superior del mapa; un usuario autenticado puede agregar/borrar pines vinculados a su `user_id` y las alertas expiran tras 12 horas.
 - **Prueba Fase 4:**
   - **Turnos:** Solo muestra días vigentes, habilita los días de la semana siguiente a partir del miércoles, permite publicar únicamente dentro de **"Mis horarios"** usando el WhatsApp del perfil y permite eliminar turnos publicados.
-- **Prueba Fase 5:** La pestaña inferior muestra **"Feria"** y abre **«Mulitas emprendedoras»** con búsqueda por categoría/texto y contacto por WhatsApp.
+- **Prueba Fase 5:** La pestaña **"Feria"** aparece únicamente para Nivel 2+ (`cadete_verificado`, `cadete_emprendedor`, `admin`), redirigiendo a `/perfil` si un Nivel 1 o visitante intenta entrar a `/directorio`, y abre **«Mulitas emprendedoras»** con búsqueda por categoría/texto y contacto por WhatsApp.
 
 ## Pruebas de Refinamiento UX, SOS y Verificación de Foto (Fase 6)
 - **Botón SOS Arrastrable:**

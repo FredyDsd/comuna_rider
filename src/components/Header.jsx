@@ -22,7 +22,8 @@ export default function Header({ title = 'Cadetes Jujuy' }) {
   const isOnProfile = location.pathname === '/perfil';
   const isPendingVerification = profile?.verification_status === 'pending' && !canUseCadeteTools;
   const safeTitle =
-    !canUseCadeteTools && (title === 'Turnos' || title === 'Novedades')
+    !canUseCadeteTools &&
+    (title === 'Turnos' || title === 'Novedades' || title === 'Feria' || title === 'Directorio')
       ? 'Comuna Jujuy'
       : title;
 

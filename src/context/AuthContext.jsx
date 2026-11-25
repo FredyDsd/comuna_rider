@@ -50,7 +50,7 @@ export const ROLES_INFO = {
     name: 'Ciudadano (Sin sesión)',
     badge: 'Nivel 1 • Ciudadano',
     description:
-      'Puede consultar el Mapa de Alertas y el Directorio de Servicios. Iniciá sesión para reportar alertas en el mapa.',
+      'Puede consultar el Mapa de Alertas de Jujuy. Iniciá sesión para reportar alertas en el mapa.',
   },
   ciudadano: {
     level: 1,
@@ -58,7 +58,7 @@ export const ROLES_INFO = {
     name: 'Ciudadano Registrado',
     badge: 'Nivel 1 • Ciudadano',
     description:
-      'Usuario registrado base. Puede ver y aportar alertas al Mapa y ver la Feria. No ve Turnos ni Novedades hasta ser verificado como Cadete.',
+      'Usuario registrado base. Puede ver y aportar alertas al Mapa. Turnos, Novedades y Feria se habilitan al ser verificado como Cadete (Nivel 2).',
   },
   cadete_verificado: {
     level: 2,
@@ -66,7 +66,7 @@ export const ROLES_INFO = {
     name: 'Cadete Verificado',
     badge: 'Nivel 2 • Cadete Verificado',
     description:
-      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Novedades y Feria.',
+      'Cadete aprobado por los moderadores. Tiene acceso completo a Mapa, Turnos, Novedades y Feria.',
   },
   cadete_emprendedor: {
     level: 3,
@@ -74,7 +74,7 @@ export const ROLES_INFO = {
     name: 'Emprendedor',
     badge: 'Nivel 3 • Emprendedor',
     description:
-      'Cadete verificado con permisos de venta en el Mercado Cadete y sello de Vendedor Confiable.',
+      'Cadete verificado con foto de perfil aprobada y permiso activo para publicar en Feria «Mulitas emprendedoras».',
   },
   admin: {
     level: 4,

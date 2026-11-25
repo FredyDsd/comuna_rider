@@ -8,12 +8,12 @@ Para abrir la participación comunitaria en el mapa de alertas a los vecinos de 
 - **Asignación:** Rol por defecto al registrarse (`signUpWithEmail` / `signInWithGoogle`). Al crear la cuenta no se obliga a subir imagen inmediata; si no tiene foto propia usa `DEFAULT_AVATAR_URL`.
 - **Permisos:**
   - Puede ver y aportar alertas viales/ciudadanas en el **Mapa de Jujuy** (cada alerta queda vinculada a su `user_id`).
-  - Puede consultar el catálogo de **Feria «Mulitas emprendedoras»**.
-  - Puede cargar su foto de perfil y WhatsApp desde **Mi Perfil** (`/perfil`) para solicitar verificación como Cadete (N2) o habilitación para Feria (N3).
+  - No accede a **Turnos**, **Novedades** ni **Feria «Mulitas emprendedoras»** hasta ser verificado como Cadete (Nivel 2).
+  - Puede cargar su foto de perfil y WhatsApp desde **Mi Perfil** (`/perfil`) para solicitar verificación como Cadete (N2).
 
 ### 2. Nivel 2: "Cadete Verificado" (`cadete_verificado`)
 - **Validación:** Aprobado por un Administrador/Moderador (Nivel 4) tras validar su solicitud y número de WhatsApp.
-- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (requiere además tener foto de perfil aprobada para publicar en "Mis horarios", tomando su `profiles.whatsapp`), **Novedades** (`/novedades`) y **Botón SOS**.
+- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (requiere además tener foto de perfil aprobada para publicar en "Mis horarios", tomando su `profiles.whatsapp`), **Novedades** (`/novedades`), **Feria «Mulitas emprendedoras»** (`/directorio`) y **Botón SOS**.
 - **Publicación en Feria:** Aunque sea Nivel 2, para publicar avisos en **«Mulitas emprendedoras»** también debe cargar una foto de perfil propia y recibir aprobación del Administrador.
 
 ### 3. Nivel 3: "Cadete Emprendedor" (`cadete_emprendedor`)

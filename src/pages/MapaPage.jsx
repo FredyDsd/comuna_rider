@@ -1673,8 +1673,10 @@ export default function MapaPage() {
           </button>
         )}
 
-        {/* Selector Compacto de 3 Zonas / Sub-barrios */}
-        <div className="pointer-events-auto relative overflow-hidden rounded-2xl bg-primary-container/95 backdrop-blur-md text-on-primary-container p-2.5 shadow-lg border border-white/15">
+        {!isPlacingPin && (
+          <>
+            {/* Selector Compacto de 3 Zonas / Sub-barrios */}
+            <div className="pointer-events-auto relative overflow-hidden rounded-2xl bg-primary-container/95 backdrop-blur-md text-on-primary-container p-2.5 shadow-lg border border-white/15">
           <div className="relative z-10 flex flex-col space-y-1.5">
             <div className="flex items-center justify-between px-0.5">
               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20">
@@ -1874,7 +1876,9 @@ export default function MapaPage() {
               </div>
             </div>
           )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 3. BOTONES FLOTANTES SOBRE EL MAPA: Refresh | Botón SOS (Solo Deliverys N2+) | Agregar Alerta */}

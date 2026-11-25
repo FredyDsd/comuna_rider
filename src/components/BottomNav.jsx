@@ -50,12 +50,6 @@ export default function BottomNav() {
           badge: null,
         },
         {
-          to: '/directorio',
-          label: 'Feria',
-          icon: 'storefront',
-          badge: null,
-        },
-        {
           to: '/perfil',
           label: 'Soy Cadete',
           icon: 'verified_user',
