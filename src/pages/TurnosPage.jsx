@@ -1,88 +1,241 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
-const INITIAL_SHIFTS = [
-  {
-    id: 'seed-shift-1',
-    day_id: 'vie24',
-    type: 'suelto',
-    typeBadge: 'Suelto / Cedo libre',
-    timeAgo: 'Hace 4m',
-    highDemand: true,
-    time: '12:30 – 16:00',
-    period: '(Almuerzo pico)',
-    zone: 'Centro & Ciudad Nieva',
-    detail: '• Subida Av. Bolivia',
-    cadete: 'Lucas M.',
-    score: 'Score 98% • Nivel Diamante',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-  },
-  {
-    id: 'seed-shift-2',
-    day_id: 'vie24',
-    type: 'permuto',
-    typeBadge: 'Permuto por Turno Mediodía',
-    timeAgo: 'Hace 12m',
-    highDemand: false,
-    time: '20:00 – 00:30',
-    period: '(Cena Finde)',
-    zone: 'Alto Comedero / Ruta 9',
-    detail: '• B° Sargento Cabral',
-    cadete: 'Franco G.',
-    score: 'Busca Centro o Cuyaya',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-  },
-  {
-    id: 'seed-shift-3',
-    day_id: 'sab25',
-    type: 'urgente',
-    typeBadge: 'Urgente • Motivo Mecánico',
-    timeAgo: 'Hace 25m',
-    highDemand: false,
-    time: '08:00 – 12:00',
-    period: '(Desayuno)',
-    zone: 'Cuyaya / Terminal Vieja',
-    detail: '• Av. 19 de Abril',
-    cadete: 'Esteban K.',
-    score: 'Score 95% • Repuestos',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-  },
-];
+// Únicas zonas reales de logueo en PedidosYa Jujuy
+const PEYA_LOGIN_ZONES = ['Centro', 'Los Perales'];
+
+const DAY_NAMES_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const DAY_NAMES_FULL = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+function toIsoDateLocal(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildTwoWeeksCalendar() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayIso = toIsoDateLocal(today);
+
+  // Lunes de la semana actual (en JS getDay(): 0=Dom, 1=Lun ... 6=Sáb)
+  const dayOfWeek = today.getDay();
+  const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() + offsetToMonday);
+
+  const days = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(currentMonday);
+    d.setDate(currentMonday.getDate() + i);
+    const id = toIsoDateLocal(d);
+    const weekDayIdx = i % 7; // 0 = Lun .. 6 = Dom
+    const dateNumber = `${String(d.getDate()).padStart(2, '0')}/${String(
+      d.getMonth() + 1
+    ).padStart(2, '0')}`;
+
+    days.push({
+      id,
+      weekIndex: i < 7 ? 0 : 1,
+      dayShort: DAY_NAMES_SHORT[weekDayIdx],
+      dayFull: DAY_NAMES_FULL[weekDayIdx],
+      dateNumber,
+      fullLabel: `${DAY_NAMES_FULL[weekDayIdx]} ${dateNumber}`,
+      isToday: id === todayIso,
+    });
+  }
+
+  return { days, todayIso };
+}
+
+function formatArPhone(raw = '') {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return '+54 9 388 ';
+  let digits = trimmed.replace(/\D/g, '');
+  if (!digits) return '+54 9 388 ';
+  if (digits.startsWith('549')) {
+    return `+54 9 ${digits.slice(3)}`.trimEnd();
+  }
+  if (digits.startsWith('54')) {
+    const rest = digits.slice(2).replace(/^9/, '');
+    return `+54 9 ${rest}`.trimEnd();
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return `+54 9 ${digits}`;
+}
+
+function hasValidPhone(raw = '') {
+  const digits = (raw || '').replace(/\D/g, '');
+  const local = digits.startsWith('549')
+    ? digits.slice(3)
+    : digits.startsWith('54')
+    ? digits.slice(2)
+    : digits;
+  return local.length >= 8;
+}
+
+function parseShiftDetail(rawDetail = '') {
+  if (!rawDetail || typeof rawDetail !== 'string') {
+    return { whatsapp: '', vehicle: 'Moto', note: '' };
+  }
+  if (rawDetail.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawDetail);
+      return {
+        whatsapp: parsed.whatsapp || '',
+        vehicle: parsed.vehicle || 'Moto',
+        note: parsed.note || '',
+      };
+    } catch {
+      return { whatsapp: '', vehicle: 'Moto', note: rawDetail };
+    }
+  }
+  return {
+    whatsapp: '',
+    vehicle: rawDetail.toLowerCase().includes('bici') ? 'Bici' : 'Moto',
+    note: rawDetail.replace(/^•\s*/, '').trim(),
+  };
+}
+
+function buildInitialSeeds(calendarDays, todayIso) {
+  const todayDay = calendarDays.find((d) => d.id === todayIso) || calendarDays[0];
+  const todayIdx = calendarDays.findIndex((d) => d.id === todayDay.id);
+  const tomorrowDay = calendarDays[Math.min(todayIdx + 1, calendarDays.length - 1)] || todayDay;
+  const nextWeekMonday = calendarDays[7] || todayDay;
+
+  return [
+    {
+      id: 'seed-shift-1',
+      user_id: 'seed-user-1',
+      day_id: todayDay.id,
+      type: 'suelto',
+      typeBadge: 'Suelto / Cedo libre',
+      timeAgo: 'Hace 8m',
+      highDemand: true,
+      time: '12:30 – 16:00',
+      note: 'Almuerzo pico',
+      zone: 'Centro',
+      vehicle: 'Moto',
+      whatsapp: '+54 9 3884123456',
+      cadete: 'Lucas M.',
+      score: 'Score 98% • Cadete Verificado',
+      avatar:
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    },
+    {
+      id: 'seed-shift-2',
+      user_id: 'seed-user-2',
+      day_id: todayDay.id,
+      type: 'permuto',
+      typeBadge: 'Permuto / Cambio',
+      timeAgo: 'Hace 19m',
+      highDemand: false,
+      time: '20:00 – 00:00',
+      note: 'Busco cambiar por franja de mediodía en Centro',
+      zone: 'Los Perales',
+      vehicle: 'Moto',
+      whatsapp: '+54 9 3884889900',
+      cadete: 'Franco G.',
+      score: 'Score 96% • Cadete Verificado',
+      avatar:
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    },
+    {
+      id: 'seed-shift-3',
+      user_id: 'seed-user-3',
+      day_id: tomorrowDay.id,
+      type: 'suelto',
+      typeBadge: 'Suelto / Cedo libre',
+      timeAgo: 'Hace 35m',
+      highDemand: true,
+      time: '19:30 – 23:30',
+      note: 'No llego por estudio, libero puntual',
+      zone: 'Centro',
+      vehicle: 'Bici',
+      whatsapp: '+54 9 3885112233',
+      cadete: 'Esteban K.',
+      score: 'Score 95% • Cadete Verificado',
+      avatar:
+        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    },
+    {
+      id: 'seed-shift-4',
+      user_id: 'seed-user-4',
+      day_id: nextWeekMonday.id,
+      type: 'suelto',
+      typeBadge: 'Suelto / Cedo libre',
+      timeAgo: 'Hace 1h',
+      highDemand: false,
+      time: '11:30 – 15:00',
+      note: 'Semana próxima disponible para cubrir',
+      zone: 'Los Perales',
+      vehicle: 'Moto',
+      whatsapp: '+54 9 3884776655',
+      cadete: 'Matías R.',
+      score: 'Score 99% • Cadete Verificado',
+      avatar:
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    },
+  ];
+}
 
 export default function TurnosPage() {
   const navigate = useNavigate();
-  const { user, profile, canWriteMapAndShifts, isAdmin } = useAuth();
+  const { user, profile, canUseCadeteTools, updateProfile } = useAuth();
 
-  const [selectedDay, setSelectedDay] = useState('vie24');
+  const { days: calendarDays, todayIso } = useMemo(() => buildTwoWeeksCalendar(), []);
+  const seedShifts = useMemo(
+    () => buildInitialSeeds(calendarDays, todayIso),
+    [calendarDays, todayIso]
+  );
+
+  // Vistas: 'general' (todos los turnos publicados) | 'mine' (mis horarios publicados)
+  const [viewMode, setViewMode] = useState('general');
+  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = Semana Actual, 1 = Semana Siguiente
+  const [selectedDay, setSelectedDay] = useState(todayIso);
   const [activeFilter, setActiveFilter] = useState('all');
+
+  // Modal de publicación
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishDay, setPublishDay] = useState('vie24');
+  const [publishWeek, setPublishWeek] = useState(0);
+  const [publishDay, setPublishDay] = useState(todayIso);
   const [publishType, setPublishType] = useState('ceder');
-  const [publishZone, setPublishZone] = useState('Centro / San Pedrito');
+  const [publishZone, setPublishZone] = useState('Centro');
   const [startTime, setStartTime] = useState('12:30');
   const [endTime, setEndTime] = useState('16:00');
   const [publishComment, setPublishComment] = useState('');
+  const [publishWhatsapp, setPublishWhatsapp] = useState('+54 9 388 ');
   const [savingShift, setSavingShift] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  const [takenShifts, setTakenShifts] = useState({});
-  const [shifts, setShifts] = useState(INITIAL_SHIFTS);
+  const [dbShifts, setDbShifts] = useState([]);
+  const [deletedSeedIds, setDeletedSeedIds] = useState([]);
+
+  useEffect(() => {
+    if (hasValidPhone(profile?.whatsapp)) {
+      setPublishWhatsapp(formatArPhone(profile.whatsapp));
+    }
+  }, [profile?.whatsapp]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2500);
+    }, 2800);
   };
 
-  const days = [
-    { id: 'vie24', label: 'Hoy', date: 'Vie 24' },
-    { id: 'sab25', label: 'Mañana', date: 'Sáb 25' },
-    { id: 'dom26', label: 'Domingo', date: 'Dom 26' },
-    { id: 'lun27', label: 'Lunes', date: 'Lun 27' },
-  ];
+  const dayLookup = useMemo(() => {
+    const map = {};
+    calendarDays.forEach((d) => {
+      map[d.id] = d;
+    });
+    return map;
+  }, [calendarDays]);
 
   const fetchShifts = useCallback(async () => {
     if (!isSupabaseConfigured) return;
@@ -92,36 +245,67 @@ export default function TurnosPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        const mapped = data.map((row) => ({
+      if (error || !data) return;
+
+      // Buscar WhatsApp actualizado en profiles para dueños que publicaron sin número embebido
+      const ownerIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
+      let phoneByUserId = {};
+      if (ownerIds.length > 0) {
+        try {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, whatsapp')
+            .in('id', ownerIds);
+          if (profilesData) {
+            profilesData.forEach((p) => {
+              if (p.whatsapp) phoneByUserId[p.id] = p.whatsapp;
+            });
+          }
+        } catch {
+          // Si falla la consulta auxiliar de perfiles continúa con los datos del turno
+        }
+      }
+
+      const mapped = data.map((row) => {
+        const parsedDetail = parseShiftDetail(row.detail);
+        const normalizedDayId = /^\d{4}-\d{2}-\d{2}$/.test(row.day_id || '')
+          ? row.day_id
+          : todayIso;
+        const normalizedZone = row.zone?.toLowerCase().includes('perales')
+          ? 'Los Perales'
+          : 'Centro';
+        const cleanPeriodNote = (row.period || '')
+          .replace(/^\(|\)$/g, '')
+          .replace(/^Turno Jujuy$/i, '')
+          .trim();
+
+        return {
           id: row.id,
           user_id: row.user_id,
-          day_id: row.day_id || 'vie24',
+          day_id: normalizedDayId,
           type: row.type || 'suelto',
           typeBadge: row.type_badge || 'Suelto / Cedo libre',
           timeAgo: 'Reciente',
           highDemand: Boolean(row.high_demand),
           time: row.time_range,
-          period: row.period || '(Turno Jujuy)',
-          zone: row.zone,
-          detail: row.detail || '• San Salvador de Jujuy',
+          note: parsedDetail.note || cleanPeriodNote,
+          zone: normalizedZone,
+          vehicle: parsedDetail.vehicle || 'Moto',
+          whatsapp: parsedDetail.whatsapp || phoneByUserId[row.user_id] || '',
           cadete: row.cadete_name,
           score: row.cadete_score || 'Score 98% • Cadete Verificado',
           avatar:
             row.avatar_url ||
             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-          takenBy: row.taken_by,
           isFromDb: true,
-        }));
-        setShifts((prev) => {
-          const remainingSeeds = prev.filter((s) => s.id.toString().startsWith('seed-'));
-          return [...mapped, ...remainingSeeds];
-        });
-      }
+        };
+      });
+
+      setDbShifts(mapped);
     } catch (err) {
       console.warn('Error cargando turnos de Supabase:', err);
     }
-  }, []);
+  }, [todayIso]);
 
   useEffect(() => {
     fetchShifts();
@@ -139,54 +323,101 @@ export default function TurnosPage() {
     };
   }, [fetchShifts]);
 
+  const allShifts = useMemo(() => {
+    const activeSeeds = seedShifts.filter((s) => !deletedSeedIds.includes(s.id));
+    return [...dbShifts, ...activeSeeds];
+  }, [dbShifts, seedShifts, deletedSeedIds]);
+
+  const myShifts = useMemo(() => {
+    if (!user) return [];
+    return allShifts
+      .filter((s) => s.user_id === user.id)
+      .sort((a, b) => (a.day_id || '').localeCompare(b.day_id || ''));
+  }, [allShifts, user]);
+
+  const handleSelectWeek = (weekIdx) => {
+    setSelectedWeek(weekIdx);
+    const weekDays = calendarDays.filter((d) => d.weekIndex === weekIdx);
+    const currentStillInWeek = weekDays.some((d) => d.id === selectedDay);
+    if (!currentStillInWeek && weekDays[0]) {
+      setSelectedDay(weekIdx === 0 && weekDays.some((d) => d.id === todayIso) ? todayIso : weekDays[0].id);
+    }
+  };
+
   const handleOpenPublishModal = () => {
-    if (!canWriteMapAndShifts) {
+    if (!canUseCadeteTools) {
       if (
         window.confirm(
-          '🔒 Acción restringida (Nivel 1: Visitante).\nSolo los Cadetes Verificados pueden publicar turnos. ¿Ir a Mi Perfil para iniciar sesión?'
+          '🔒 Acción restringida.\nSolo los Cadetes Verificados pueden publicar turnos. ¿Ir a Mi Perfil?'
         )
       ) {
         navigate('/perfil');
       }
       return;
     }
+    const dayObj = dayLookup[selectedDay];
+    setPublishWeek(dayObj ? dayObj.weekIndex : selectedWeek);
     setPublishDay(selectedDay);
+    setPublishWhatsapp(
+      hasValidPhone(profile?.whatsapp) ? formatArPhone(profile.whatsapp) : '+54 9 388 '
+    );
     setIsPublishModalOpen(true);
   };
 
-  const handleTakeShift = async (shift) => {
-    if (!canWriteMapAndShifts || !user) {
-      if (
-        window.confirm(
-          '🔒 Iniciá sesión como Cadete Verificado para tomar turnos del tablón. ¿Ir a Mi Perfil?'
-        )
-      ) {
-        navigate('/perfil');
-      }
+  const handleRequestShiftWhatsApp = (shift) => {
+    const dayInfo = dayLookup[shift.day_id];
+    const dayLabel = dayInfo ? dayInfo.fullLabel : shift.day_id;
+    const cleanPhone = (shift.whatsapp || '').replace(/\D/g, '');
+
+    if (!cleanPhone || cleanPhone.length < 8) {
+      showToast(`${shift.cadete} no tiene WhatsApp cargado en este turno.`);
       return;
     }
 
-    setTakenShifts((prev) => ({ ...prev, [shift.id]: true }));
-    showToast(
-      shift.type === 'permuto'
-        ? `Solicitud de permuta enviada a ${shift.cadete}`
-        : `¡Turno ${shift.time} asignado a tu perfil!`
-    );
+    const msg =
+      `Hola ${shift.cadete}, vi tu turno publicado en Comuna Rider Jujuy:\n` +
+      `📅 Día: ${dayLabel}\n` +
+      `🕒 Horario: ${shift.time}\n` +
+      `📍 Zona de logueo PeYa: ${shift.zone}\n` +
+      `🔄 Modalidad: ${shift.typeBadge}\n` +
+      (shift.note ? `💬 Nota: ${shift.note}\n` : '') +
+      `¿Todavía lo tenés disponible?`;
 
-    if (shift.isFromDb && isSupabaseConfigured) {
-      await supabase.from('shifts').update({ taken_by: user.id }).eq('id', shift.id);
-    }
+    window.open(
+      `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
   };
 
   const handlePublishShift = async () => {
-    if (!canWriteMapAndShifts || !user) {
+    if (!canUseCadeteTools || !user) {
       navigate('/perfil');
+      return;
+    }
+
+    if (!hasValidPhone(publishWhatsapp)) {
+      alert('Ingresá un WhatsApp válido (con característica) para que puedan pedirte el turno.');
       return;
     }
 
     setSavingShift(true);
     const cadeteName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Jujuy';
     const isSuelto = publishType === 'ceder';
+    const formattedPhone = formatArPhone(publishWhatsapp);
+    const vehicle = profile?.vehicle || 'Moto';
+    const cleanNote = publishComment.trim();
+
+    // Guardar WhatsApp en el perfil si aún no estaba registrado o cambió
+    if (!hasValidPhone(profile?.whatsapp) || formatArPhone(profile?.whatsapp) !== formattedPhone) {
+      updateProfile({ whatsapp: formattedPhone }).catch(() => {});
+    }
+
+    const detailPayload = JSON.stringify({
+      whatsapp: formattedPhone,
+      vehicle,
+      note: cleanNote,
+    });
 
     const newRow = {
       user_id: user.id,
@@ -196,38 +427,17 @@ export default function TurnosPage() {
       type: isSuelto ? 'suelto' : 'permuto',
       type_badge: isSuelto ? 'Suelto / Cedo libre' : 'Permuto / Cambio',
       time_range: `${startTime} – ${endTime}`,
-      period: publishComment.trim() ? `(${publishComment.trim()})` : '(Turno Jujuy)',
+      period: cleanNote ? `(${cleanNote})` : `(${publishZone})`,
       zone: publishZone,
-      detail: `• Vehículo: ${profile?.vehicle || 'Moto'}`,
+      detail: detailPayload,
       high_demand: true,
     };
 
     try {
       if (isSupabaseConfigured) {
-        const { data, error } = await supabase.from('shifts').insert(newRow).select().single();
+        const { error } = await supabase.from('shifts').insert(newRow);
         if (error) throw error;
-
-        if (data) {
-          const uiShift = {
-            id: data.id,
-            user_id: data.user_id,
-            day_id: data.day_id || publishDay,
-            type: data.type,
-            typeBadge: data.type_badge,
-            timeAgo: 'Ahora mismo',
-            highDemand: data.high_demand,
-            time: data.time_range,
-            period: data.period,
-            zone: data.zone,
-            detail: data.detail,
-            cadete: data.cadete_name,
-            score: data.cadete_score,
-            avatar:
-              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-            isFromDb: true,
-          };
-          setShifts((prev) => [uiShift, ...prev]);
-        }
+        await fetchShifts();
       } else {
         const localShift = {
           id: `local-shift-${Date.now()}`,
@@ -238,21 +448,26 @@ export default function TurnosPage() {
           timeAgo: 'Ahora mismo',
           highDemand: true,
           time: newRow.time_range,
-          period: newRow.period,
-          zone: newRow.zone,
-          detail: newRow.detail,
-          cadete: newRow.cadete_name,
+          note: cleanNote,
+          zone: publishZone,
+          vehicle,
+          whatsapp: formattedPhone,
+          cadete: cadeteName,
           score: newRow.cadete_score,
           avatar:
             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
         };
-        setShifts((prev) => [localShift, ...prev]);
+        setDbShifts((prev) => [localShift, ...prev]);
       }
 
+      const publishedDayObj = dayLookup[publishDay];
+      if (publishedDayObj) {
+        setSelectedWeek(publishedDayObj.weekIndex);
+      }
       setSelectedDay(publishDay);
       setPublishComment('');
       setIsPublishModalOpen(false);
-      showToast('¡Turno publicado en el tablón!');
+      showToast('¡Turno publicado! Los compañeros podrán pedirlo por WhatsApp.');
     } catch (err) {
       alert(`Error al publicar turno en Supabase: ${err.message}`);
     } finally {
@@ -260,170 +475,215 @@ export default function TurnosPage() {
     }
   };
 
+  // Control estricto: el usuario SOLO puede borrar sus propios horarios publicados
   const handleDeleteShift = async (shift) => {
-    if (!user && !shift.id.toString().startsWith('seed-')) return;
+    if (!user || shift.user_id !== user.id) return;
     try {
       if (shift.isFromDb && isSupabaseConfigured) {
-        const { error } = await supabase.from('shifts').delete().eq('id', shift.id);
+        const { error } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('id', shift.id)
+          .eq('user_id', user.id);
         if (error) throw error;
+        setDbShifts((prev) => prev.filter((s) => s.id !== shift.id));
+      } else if (shift.id.toString().startsWith('seed-')) {
+        setDeletedSeedIds((prev) => [...prev, shift.id]);
+      } else {
+        setDbShifts((prev) => prev.filter((s) => s.id !== shift.id));
       }
-      setShifts((prev) => prev.filter((s) => s.id !== shift.id));
-      showToast('Turno eliminado del tablón');
+      showToast('Tu horario publicado fue eliminado.');
     } catch (err) {
-      alert(`No se pudo borrar el turno: ${err.message}`);
+      alert(`No se pudo borrar tu turno: ${err.message}`);
     }
   };
 
-  const filteredShifts = shifts.filter((s) => {
-    const matchesDay = (s.day_id || 'vie24') === selectedDay;
-    if (!matchesDay) return false;
+  const visibleWeekDays = useMemo(
+    () => calendarDays.filter((d) => d.weekIndex === selectedWeek),
+    [calendarDays, selectedWeek]
+  );
+
+  const modalWeekDays = useMemo(
+    () => calendarDays.filter((d) => d.weekIndex === publishWeek),
+    [calendarDays, publishWeek]
+  );
+
+  const filteredGeneralShifts = allShifts.filter((s) => {
+    if (s.day_id !== selectedDay) return false;
     if (activeFilter === 'all') return true;
+    if (activeFilter === 'Centro') return s.zone === 'Centro';
+    if (activeFilter === 'Los Perales') return s.zone === 'Los Perales';
     if (activeFilter === 'suelto') return s.type === 'suelto';
     if (activeFilter === 'permuto') return s.type === 'permuto';
-    if (activeFilter === 'centro') return s.zone.toLowerCase().includes('centro');
-    if (activeFilter === 'altocomedero') return s.zone.toLowerCase().includes('alto comedero');
     return true;
   });
 
+  const displayedShifts = viewMode === 'mine' ? myShifts : filteredGeneralShifts;
+
   return (
-    <div className="flex flex-col w-full pb-6 space-y-4 pt-2">
-      {/* Operational Zone Header & Stats Summary */}
+    <div className="flex flex-col w-full pb-6 space-y-3.5 pt-2">
+      {/* Cabecera Operativa + Selector de Vista (Tablón General vs Mis Horarios) */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-surface-container/40">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container/10 text-tertiary font-label-sm text-label-sm uppercase tracking-wider font-extrabold mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
-              Bolsa Comunitaria Activa
+              PedidosYa Jujuy • 2 Semanas
             </span>
             <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-extrabold">
-              Tablón de Franjas y Turnos
+              Turnos Centro &amp; Los Perales
             </h1>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="font-label-sm text-label-sm uppercase text-secondary font-bold">Total Jujuy</span>
+          <div className="flex flex-col items-end flex-shrink-0">
+            <span className="font-label-sm text-[10px] uppercase text-secondary font-bold">
+              Publicados
+            </span>
             <span className="font-headline-md text-headline-md font-extrabold text-primary-container">
-              {shifts.length} libres
+              {allShifts.length}
             </span>
           </div>
         </div>
 
-        {/* Day Selector Strip (Carousel) */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1 pb-1 -mx-1 px-1">
-          {days.map((day) => {
-            const isSelected = selectedDay === day.id;
-            const dayCount = shifts.filter((s) => (s.day_id || 'vie24') === day.id).length;
-            return (
+        {/* Conmutador Vista General vs Vista Particular */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-surface-container-low rounded-xl">
+          <button
+            type="button"
+            onClick={() => setViewMode('general')}
+            className={`h-10 rounded-lg font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+              viewMode === 'general'
+                ? 'bg-primary-container text-on-primary-container shadow-sm'
+                : 'text-secondary hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">groups</span>
+            <span>Tablón General</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('mine')}
+            className={`h-10 rounded-lg font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+              viewMode === 'mine'
+                ? 'bg-primary-container text-on-primary-container shadow-sm'
+                : 'text-secondary hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">person</span>
+            <span>Mis Horarios ({myShifts.length})</span>
+          </button>
+        </div>
+
+        {/* Calendario de 2 Semanas (Lunes a Domingo) para la Vista General */}
+        {viewMode === 'general' && (
+          <div className="space-y-2 pt-0.5">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
-                key={day.id}
                 type="button"
-                onClick={() => setSelectedDay(day.id)}
-                className={`flex-shrink-0 flex flex-col items-center justify-center min-w-[76px] py-2 px-3 rounded-xl transition-all active:scale-95 ${
-                  isSelected
-                    ? 'bg-primary-container text-on-primary-container shadow-md'
-                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                onClick={() => handleSelectWeek(0)}
+                className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold transition-all ${
+                  selectedWeek === 0
+                    ? 'bg-inverse-surface text-inverse-on-surface shadow-xs'
+                    : 'bg-surface-container text-secondary'
                 }`}
               >
-                <span
-                  className={`font-label-sm text-label-sm uppercase tracking-wide ${
-                    isSelected ? 'opacity-90' : 'text-secondary'
-                  }`}
-                >
-                  {day.label}
-                </span>
-                <span className="font-headline-md text-headline-md font-extrabold leading-tight">
-                  {day.date}
-                </span>
-                <span
-                  className={`inline-block mt-0.5 px-1.5 py-0.2 rounded-full font-label-sm text-[9px] font-extrabold ${
-                    isSelected
-                      ? 'bg-surface-container-lowest text-primary-container'
-                      : 'bg-surface-container text-secondary'
-                  }`}
-                >
-                  {dayCount} {dayCount === 1 ? 'cupo' : 'cupos'}
-                </span>
+                Semana Actual (Lun–Dom)
               </button>
-            );
-          })}
+              <button
+                type="button"
+                onClick={() => handleSelectWeek(1)}
+                className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold transition-all ${
+                  selectedWeek === 1
+                    ? 'bg-inverse-surface text-inverse-on-surface shadow-xs'
+                    : 'bg-surface-container text-secondary'
+                }`}
+              >
+                Semana Siguiente (Lun–Dom)
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 pt-0.5">
+              {visibleWeekDays.map((day) => {
+                const isSelected = selectedDay === day.id;
+                const dayCount = allShifts.filter((s) => s.day_id === day.id).length;
+                return (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() => setSelectedDay(day.id)}
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all active:scale-95 ${
+                      isSelected
+                        ? 'bg-primary-container text-on-primary-container shadow-md'
+                        : day.isToday
+                        ? 'bg-primary-fixed/50 text-on-surface border border-primary/30'
+                        : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                    }`}
+                  >
+                    <span
+                      className={`font-label-sm text-[10px] uppercase font-bold ${
+                        isSelected ? 'opacity-90' : 'text-secondary'
+                      }`}
+                    >
+                      {day.dayShort}
+                    </span>
+                    <span className="font-label-md text-[12px] font-extrabold leading-tight">
+                      {day.dateNumber.split('/')[0]}
+                    </span>
+                    <span
+                      className={`mt-1 px-1.5 rounded-full font-label-sm text-[9px] font-extrabold ${
+                        isSelected
+                          ? 'bg-surface-container-lowest text-primary-container'
+                          : dayCount > 0
+                          ? 'bg-tertiary-container/20 text-tertiary'
+                          : 'bg-surface-container text-secondary/70'
+                      }`}
+                    >
+                      {dayCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Filtros rápidos (Solo Zonas PeYa reales: Centro y Los Perales + Modalidad) */}
+      {viewMode === 'general' && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
+          {[
+            { id: 'all', label: 'Todos' },
+            { id: 'Centro', label: '📍 Centro' },
+            { id: 'Los Perales', label: '📍 Los Perales' },
+            { id: 'suelto', label: 'Suelto (Cedo)' },
+            { id: 'permuto', label: 'Permuto' },
+          ].map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setActiveFilter(chip.id)}
+              className={`flex-shrink-0 h-9 px-3.5 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform ${
+                activeFilter === chip.id
+                  ? 'bg-primary-container text-on-primary-container'
+                  : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Filter Chips Row */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
-        <button
-          type="button"
-          onClick={() => setActiveFilter('all')}
-          className={`flex-shrink-0 h-9 px-4 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform flex items-center gap-1.5 ${
-            activeFilter === 'all'
-              ? 'bg-primary-container text-on-primary-container'
-              : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-          }`}
-        >
-          <span className="material-symbols-outlined text-base">tune</span>
-          Todos
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter('suelto')}
-          className={`flex-shrink-0 h-9 px-4 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform flex items-center gap-1.5 ${
-            activeFilter === 'suelto'
-              ? 'bg-primary-container text-on-primary-container'
-              : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-tertiary-container"></span>
-          Suelto (Gratis)
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter('permuto')}
-          className={`flex-shrink-0 h-9 px-4 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform flex items-center gap-1.5 ${
-            activeFilter === 'permuto'
-              ? 'bg-primary-container text-on-primary-container'
-              : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-secondary"></span>
-          Permuto
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter('centro')}
-          className={`flex-shrink-0 h-9 px-4 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform ${
-            activeFilter === 'centro'
-              ? 'bg-primary-container text-on-primary-container'
-              : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-          }`}
-        >
-          Noche Centro
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveFilter('altocomedero')}
-          className={`flex-shrink-0 h-9 px-4 rounded-full font-label-md text-label-md font-bold shadow-sm transition-transform ${
-            activeFilter === 'altocomedero'
-              ? 'bg-primary-container text-on-primary-container'
-              : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-          }`}
-        >
-          Alto Comedero
-        </button>
-      </div>
-
-      {/* Hero Quick-Publish Banner (PeYa Soft Crimson Tint) */}
-      <div className="relative overflow-hidden bg-primary-fixed/40 rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 border border-primary-container/20">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* Banner de Publicación Rápida */}
+      <div className="relative overflow-hidden bg-primary-fixed/40 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-3 border border-primary-container/20">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
             <span className="material-symbols-outlined text-xl">event_available</span>
           </div>
           <div className="min-w-0">
             <p className="font-label-lg text-label-lg text-on-primary-fixed font-extrabold truncate">
-              ¿No podés rodar hoy?
+              ¿Liberás o cambiás turno?
             </p>
             <p className="font-body-sm text-body-sm text-on-primary-fixed-variant truncate">
-              {canWriteMapAndShifts
-                ? 'Cedé tu franja al grupo y cuidá tu Score'
-                : 'Iniciá sesión (Nivel 2) para publicar turnos'}
+              Publicá tu horario y te escriben por WhatsApp
             </p>
           </div>
         </div>
@@ -433,23 +693,25 @@ export default function TurnosPage() {
           onClick={handleOpenPublishModal}
           className="h-10 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all flex-shrink-0"
         >
-          <span className="material-symbols-outlined text-base">
-            {canWriteMapAndShifts ? 'add_circle' : 'lock'}
-          </span>
+          <span className="material-symbols-outlined text-base">add_circle</span>
           Publicar
         </button>
       </div>
 
-      {/* Cards Feed (Shift Board) */}
-      <div className="space-y-3.5">
-        {filteredShifts.length === 0 ? (
+      {/* Listado de Turnos (Tablón General o Mis Horarios Publicados) */}
+      <div className="space-y-3">
+        {displayedShifts.length === 0 ? (
           <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col items-center text-center gap-2 border border-surface-container/50">
             <span className="material-symbols-outlined text-3xl text-secondary">event_busy</span>
             <p className="font-headline-md text-headline-md text-on-surface font-extrabold">
-              Sin turnos publicados en este filtro
+              {viewMode === 'mine'
+                ? 'Todavía no publicaste ningún horario'
+                : 'Sin turnos publicados en este filtro'}
             </p>
             <p className="font-body-sm text-body-sm text-secondary max-w-xs">
-              Sé el primero en ceder o permutar una franja horaria para este día en Jujuy.
+              {viewMode === 'mine'
+                ? 'Cuando publiques un turno para ceder o permutar aparecerá acá y solo vos podrás borrarlo.'
+                : 'Elegí otro día de estas 2 semanas o publicá tu franja en Centro o Los Perales.'}
             </p>
             <button
               type="button"
@@ -457,17 +719,15 @@ export default function TurnosPage() {
               className="mt-1 h-9 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-transform"
             >
               <span className="material-symbols-outlined text-sm">add_circle</span>
-              Publicar Franja Aquí
+              Publicar Turno
             </button>
           </div>
         ) : (
-          filteredShifts.map((shift) => {
-            const isTaken = takenShifts[shift.id] || Boolean(shift.takenBy);
-            const canDelete = Boolean(
-              (user && shift.user_id === user.id) ||
-                isAdmin ||
-                (canWriteMapAndShifts && shift.id.toString().startsWith('seed-'))
-            );
+          displayedShifts.map((shift) => {
+            // SOLO el propietario del turno tiene permiso de borrarlo
+            const isMyShift = Boolean(user && shift.user_id === user.id);
+            const dayInfo = dayLookup[shift.day_id];
+            const dayLabel = dayInfo ? dayInfo.fullLabel : shift.day_id;
 
             return (
               <div
@@ -476,13 +736,9 @@ export default function TurnosPage() {
               >
                 <div
                   className={`absolute top-0 left-0 w-1.5 h-full ${
-                    shift.type === 'suelto'
-                      ? 'bg-tertiary-container'
-                      : shift.type === 'permuto'
-                      ? 'bg-secondary'
-                      : 'bg-error'
+                    shift.type === 'suelto' ? 'bg-tertiary-container' : 'bg-secondary'
                   }`}
-                ></div>
+                />
 
                 <div className="flex items-start justify-between gap-2 pl-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -490,104 +746,83 @@ export default function TurnosPage() {
                       className={`px-2.5 py-1 rounded-full font-label-sm text-label-sm font-extrabold uppercase tracking-wide inline-flex items-center gap-1 ${
                         shift.type === 'suelto'
                           ? 'bg-tertiary-container/15 text-tertiary'
-                          : shift.type === 'permuto'
-                          ? 'bg-secondary-container text-on-secondary-container'
-                          : 'bg-error-container text-on-error-container'
+                          : 'bg-secondary-container text-on-secondary-container'
                       }`}
                     >
                       <span className="material-symbols-outlined text-xs">
-                        {shift.type === 'suelto' ? 'verified' : 'swap_horiz'}
+                        {shift.type === 'suelto' ? 'event_available' : 'swap_horiz'}
                       </span>
                       {shift.typeBadge}
                     </span>
-                    <span className="font-body-sm text-body-sm text-secondary font-bold">
-                      {shift.timeAgo}
+                    <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-label-sm text-[11px] font-bold">
+                      📅 {dayLabel}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {shift.highDemand && (
-                      <div className="flex items-center gap-1 bg-surface-container-low px-2 py-0.5 rounded-full">
-                        <span className="material-symbols-outlined text-xs text-primary-container">
-                          local_fire_department
-                        </span>
-                        <span className="font-label-sm text-label-sm font-bold text-on-surface">
-                          Demanda Alta
-                        </span>
-                      </div>
-                    )}
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteShift(shift)}
-                        title="Borrar turno publicado"
-                        className="h-7 px-2.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center gap-1 active:scale-90 transition-transform"
-                      >
-                        <span className="material-symbols-outlined text-sm">delete</span>
-                        <span>Borrar</span>
-                      </button>
-                    )}
-                  </div>
+
+                  {/* El botón borrar SOLO aparece en los horarios del propio usuario */}
+                  {isMyShift && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteShift(shift)}
+                      title="Borrar mi turno publicado"
+                      className="h-7 px-2.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center gap-1 active:scale-90 transition-transform flex-shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                      <span>Borrar</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="pl-1">
-                  <div className="flex items-center gap-1.5 text-on-surface">
-                    <span className="material-symbols-outlined text-xl text-primary-container">schedule</span>
-                    <span className="font-headline-md text-headline-md font-extrabold tracking-tight">
-                      {shift.time}
-                    </span>
-                    <span className="text-secondary font-label-md text-label-md font-medium">
-                      {shift.period}
+                <div className="pl-1 space-y-1">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 text-on-surface">
+                      <span className="material-symbols-outlined text-xl text-primary-container">
+                        schedule
+                      </span>
+                      <span className="font-headline-md text-headline-md font-extrabold tracking-tight">
+                        {shift.time}
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary-fixed text-primary font-label-sm text-label-sm font-extrabold">
+                      📍 Logueo: {shift.zone}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 text-secondary mt-1">
-                    <span className="material-symbols-outlined text-sm text-secondary">navigation</span>
-                    <span className="font-body-md text-body-md font-medium text-on-surface">{shift.zone}</span>
-                    <span className="text-xs text-secondary">{shift.detail}</span>
-                  </div>
+
+                  {shift.note && (
+                    <p className="font-body-sm text-body-sm text-secondary">💬 {shift.note}</p>
+                  )}
                 </div>
 
-                {/* Cadete Info Row */}
-                <div className="pl-1 pt-2 flex items-center justify-between bg-surface-container-low/60 p-2.5 rounded-lg">
+                {/* Propietario + Botón directo a WhatsApp con mensaje predeterminado */}
+                <div className="pl-1 pt-2 flex items-center justify-between bg-surface-container-low/60 p-2.5 rounded-lg gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <img
-                      className="w-8 h-8 rounded-full object-cover shadow-sm"
+                      className="w-8 h-8 rounded-full object-cover shadow-sm flex-shrink-0"
                       src={shift.avatar}
                       alt={shift.cadete}
                     />
                     <div className="min-w-0">
                       <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
-                        {shift.cadete}
+                        {shift.cadete} {isMyShift && '(Vos)'}
                       </p>
-                      <p className="font-body-sm text-body-sm text-tertiary flex items-center gap-0.5 font-bold truncate">
-                        <span className="material-symbols-outlined text-xs">star</span>
-                        {shift.score}
+                      <p className="font-body-sm text-[11px] text-secondary truncate">
+                        {shift.vehicle} • {shift.score}
                       </p>
                     </div>
                   </div>
 
-                  {shift.type === 'permuto' ? (
-                    <button
-                      type="button"
-                      onClick={() => handleTakeShift(shift)}
-                      className="h-11 px-4 rounded-full bg-tertiary-container text-on-tertiary font-label-md text-label-md font-bold shadow-md active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-lg">chat</span>
-                      {isTaken ? 'Solicitado' : 'WhatsApp'}
-                    </button>
+                  {isMyShift ? (
+                    <span className="px-3 py-1.5 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm font-extrabold flex-shrink-0">
+                      Tu publicación
+                    </span>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => handleTakeShift(shift)}
-                      className={`h-11 px-5 rounded-full font-label-lg text-label-lg font-bold shadow-md active:scale-95 transition-all flex items-center gap-1 flex-shrink-0 ${
-                        isTaken
-                          ? 'bg-tertiary-container text-on-tertiary'
-                          : 'bg-primary-container text-on-primary-container'
-                      }`}
+                      onClick={() => handleRequestShiftWhatsApp(shift)}
+                      className="h-10 px-4 rounded-full bg-tertiary text-on-tertiary font-label-md text-label-md font-extrabold shadow-md active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0"
                     >
-                      <span className="material-symbols-outlined text-lg">
-                        {isTaken ? 'done_all' : 'touch_app'}
-                      </span>
-                      {isTaken ? '¡Asignado!' : 'Agarrar Turno'}
+                      <span className="material-symbols-outlined text-base">chat</span>
+                      <span>{shift.type === 'permuto' ? 'Permutar' : 'Pedir por WhatsApp'}</span>
                     </button>
                   )}
                 </div>
@@ -597,13 +832,13 @@ export default function TurnosPage() {
         )}
       </div>
 
-      {/* Modal Publicar Franja */}
+      {/* Modal Publicar Franja (2 semanas Lun-Dom + Zonas reales Centro / Los Perales) */}
       {isPublishModalOpen && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface-container-lowest w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl p-space-md shadow-2xl flex flex-col space-y-3">
+          <div className="bg-surface-container-lowest w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-space-md shadow-2xl flex flex-col space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-headline-md text-headline-md text-on-surface">
-                Publicar Franja / Turno
+              <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold">
+                Publicar Turno PedidosYa
               </h3>
               <button
                 type="button"
@@ -615,23 +850,58 @@ export default function TurnosPage() {
             </div>
 
             <div className="space-y-3">
+              {/* Elegir Semana Actual o Semana Siguiente + Día Lun a Dom */}
               <div>
-                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
-                  Día del Turno
+                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1.5">
+                  Día del Turno (Calendario 2 Semanas Lun–Dom)
                 </label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {days.map((d) => (
+                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPublishWeek(0);
+                      const first = calendarDays.find((d) => d.weekIndex === 0);
+                      if (first) setPublishDay(first.id);
+                    }}
+                    className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold ${
+                      publishWeek === 0
+                        ? 'bg-inverse-surface text-inverse-on-surface'
+                        : 'bg-surface-container text-secondary'
+                    }`}
+                  >
+                    Semana Actual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPublishWeek(1);
+                      const first = calendarDays.find((d) => d.weekIndex === 1);
+                      if (first) setPublishDay(first.id);
+                    }}
+                    className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold ${
+                      publishWeek === 1
+                        ? 'bg-inverse-surface text-inverse-on-surface'
+                        : 'bg-surface-container text-secondary'
+                    }`}
+                  >
+                    Semana Siguiente
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {modalWeekDays.map((d) => (
                     <button
                       key={d.id}
                       type="button"
                       onClick={() => setPublishDay(d.id)}
-                      className={`py-2 px-2 rounded-xl font-label-sm text-label-sm font-bold text-center transition-colors ${
+                      className={`py-2 px-1 rounded-xl font-label-sm text-[11px] font-bold text-center transition-colors flex flex-col items-center ${
                         publishDay === d.id
-                          ? 'bg-primary-container text-on-primary-container'
+                          ? 'bg-primary-container text-on-primary-container font-extrabold'
                           : 'bg-surface-container-low text-on-surface'
                       }`}
                     >
-                      {d.date}
+                      <span className="text-[9px] uppercase opacity-80">{d.dayShort}</span>
+                      <span>{d.dateNumber.split('/')[0]}</span>
                     </button>
                   ))}
                 </div>
@@ -639,7 +909,7 @@ export default function TurnosPage() {
 
               <div>
                 <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
-                  Tipo de Publicación
+                  Modalidad
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -669,20 +939,25 @@ export default function TurnosPage() {
 
               <div>
                 <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
-                  Zona Operativa
+                  Zona de Logueo en PedidosYa
                 </label>
-                <select
-                  value={publishZone}
-                  onChange={(e) => setPublishZone(e.target.value)}
-                  className="w-full h-12 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
-                >
-                  <option>Centro / San Pedrito</option>
-                  <option>Ciudad de Nieva / Los Perales</option>
-                  <option>Alto Comedero (Ruta 9)</option>
-                  <option>Cuyaya / Moreno / Terminal</option>
-                  <option>Chijra / La Viña</option>
-                  <option>Palpalá (Ruta 66)</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  {PEYA_LOGIN_ZONES.map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setPublishZone(z)}
+                      className={`h-11 rounded-xl font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-colors ${
+                        publishZone === z
+                          ? 'bg-primary-container text-on-primary-container shadow-sm'
+                          : 'bg-surface-container-low text-on-surface'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">location_on</span>
+                      {z}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -691,7 +966,7 @@ export default function TurnosPage() {
                     Inicio Franja
                   </label>
                   <input
-                    className="w-full h-12 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
+                    className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
                     type="time"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
@@ -702,7 +977,7 @@ export default function TurnosPage() {
                     Fin Franja
                   </label>
                   <input
-                    className="w-full h-12 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
+                    className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
                     type="time"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
@@ -712,28 +987,42 @@ export default function TurnosPage() {
 
               <div>
                 <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
-                  Comentario o Motivo (Opcional)
+                  Tu WhatsApp para que te contacten
+                </label>
+                <input
+                  type="tel"
+                  value={publishWhatsapp}
+                  onChange={(e) => setPublishWhatsapp(e.target.value)}
+                  onBlur={() => setPublishWhatsapp((prev) => formatArPhone(prev))}
+                  placeholder="+54 9 388 4123456"
+                  className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
+                  Nota o Cambio Buscado (Opcional)
                 </label>
                 <input
                   value={publishComment}
                   onChange={(e) => setPublishComment(e.target.value)}
-                  className="w-full h-12 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
-                  placeholder="Ej: No llego por laburo / Cambio por noche"
+                  className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
+                  placeholder="Ej: Cambio por horario de noche / Libero puntual"
                   type="text"
                 />
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 id="btn-confirmar-publicacion"
                 disabled={savingShift}
                 type="button"
                 onClick={handlePublishShift}
-                className="w-full h-12 rounded-full bg-primary-container text-on-primary-container font-label-lg text-label-lg font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                className="w-full h-12 rounded-full bg-primary-container text-on-primary-container font-label-lg text-label-lg font-extrabold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-xl">send</span>
-                {savingShift ? 'Guardando en Supabase...' : 'Publicar en el Tablón'}
+                {savingShift ? 'Guardando en Supabase...' : 'Publicar Turno'}
               </button>
             </div>
           </div>
@@ -743,7 +1032,9 @@ export default function TurnosPage() {
       {/* Toast Feedback */}
       {toastMessage && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-4 py-2.5 rounded-full shadow-xl font-body-sm text-body-sm flex items-center gap-2 z-50 animate-in fade-in slide-in-from-bottom duration-200">
-          <span className="material-symbols-outlined text-tertiary-fixed text-base">check_circle</span>
+          <span className="material-symbols-outlined text-tertiary-fixed text-base">
+            check_circle
+          </span>
           <span>{toastMessage}</span>
         </div>
       )}
