@@ -13,7 +13,7 @@ Para abrir la participación comunitaria en el mapa de alertas a los vecinos de 
 
 ### 2. Nivel 2: "Cadete Verificado" (`cadete_verificado`)
 - **Validación:** Aprobado por un Administrador/Moderador (Nivel 4) tras validar su solicitud y número de WhatsApp.
-- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (requiere además tener foto de perfil aprobada para publicar en "Mis horarios", tomando su `profiles.whatsapp`), **Calculadora Financiera** y **Botón SOS**.
+- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (requiere además tener foto de perfil aprobada para publicar en "Mis horarios", tomando su `profiles.whatsapp`), **Avisos y Noticias** (`/noticias`) y **Botón SOS**.
 - **Publicación en Feria:** Aunque sea Nivel 2, para publicar avisos en **«Mulitas emprendedoras»** también debe cargar una foto de perfil propia y recibir aprobación del Administrador.
 
 ### 3. Nivel 3: "Cadete Emprendedor" (`cadete_emprendedor`)
@@ -22,7 +22,8 @@ Para abrir la participación comunitaria en el mapa de alertas a los vecinos de 
 
 ### 4. Nivel 4: "Administrador / Moderador" (`admin`)
 - **Permisos:**
-  - Acceso completo a todas las herramientas operativas y de Feria.
+  - Acceso completo a todas las herramientas operativas, **Avisos y Noticias** y Feria.
+  - **Avisos Oficiales:** Es el único rol habilitado para publicar y eliminar avisos oficiales en `/noticias` (con prioridad `info`, `importante` o `urgente` y vencimiento automático).
   - **Auto-aprobación de foto:** Si un Administrador sube su propia foto de perfil, queda aprobada automáticamente (`verification_status = 'approved'`) sin requerir aprobación previa.
   - Acceso al **Panel de Moderación** en `/perfil` y al bloque administrativo rápido en **Feria**:
     - Tocar cualquier miniatura de solicitante o usuario abre un **modal Lightbox ampliado** para verificar claramente el rostro/identidad en la foto.

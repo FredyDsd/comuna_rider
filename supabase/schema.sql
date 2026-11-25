@@ -320,3 +320,74 @@ create policy "Autor o admin borra item de directorio"
     )
   );
 
+-- ============================================================================
+-- 5. TABLA: announcements (Avisos Oficiales del Administrador)
+-- ============================================================================
+create table if not exists public.announcements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  author_name text not null default 'Administración',
+  title text not null,
+  body text not null,
+  priority text not null default 'info'
+    check (priority in ('info', 'importante', 'urgente')),
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.announcements enable row level security;
+
+drop policy if exists "Cadetes verificados leen avisos oficiales" on public.announcements;
+create policy "Cadetes verificados leen avisos oficiales"
+  on public.announcements for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid()
+        and p.is_banned = false
+        and p.role in ('cadete_verificado', 'cadete_emprendedor', 'admin')
+    )
+  );
+
+drop policy if exists "Solo admin publica avisos oficiales" on public.announcements;
+create policy "Solo admin publica avisos oficiales"
+  on public.announcements for insert
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid()
+        and p.is_banned = false
+        and p.role = 'admin'
+    )
+  );
+
+drop policy if exists "Solo admin actualiza avisos oficiales" on public.announcements;
+create policy "Solo admin actualiza avisos oficiales"
+  on public.announcements for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid()
+        and p.is_banned = false
+        and p.role = 'admin'
+    )
+  );
+
+drop policy if exists "Solo admin borra avisos oficiales" on public.announcements;
+create policy "Solo admin borra avisos oficiales"
+  on public.announcements for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid()
+        and p.is_banned = false
+        and p.role = 'admin'
+    )
+  );
+
+

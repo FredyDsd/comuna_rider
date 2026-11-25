@@ -59,3 +59,10 @@
   - Pop-up previo a WhatsApp aclarando el carácter gratuito y sin responsabilidad de Comuna Rider sobre ventas entre usuarios.
   - Botón de bandera (`flag`) para reportar publicaciones con motivo de texto y panel exclusivo para que el Administrador borre la publicación o descarte el reporte.
 - **Producción:** Desplegado en Vercel (`https://comunarider.vercel.app`) sincronizado con `origin/master`.
+
+---
+
+### ✅ Fase 7 - Reemplazo de Calculadora por Avisos y Noticias (COMPLETADA)
+- **Eliminación de Calculadora:** Se removió `CalculadoraPage.jsx`, se reemplazó la pestaña inferior por **Noticias** (`/noticias`, Nivel 2+) y se agregó redirección desde `/calculadora` hacia `/noticias`.
+- **Noticias Automáticas (`api/noticias.js`):** Función serverless en Vercel (y middleware local en `vite.config.js`) que consulta Google News RSS Argentina para delivery de plataformas, nafta/combustibles y tránsito/clima en Jujuy, con deduplicación, clasificación automática y caché CDN de 30 minutos.
+- **Avisos Oficiales del Admin (`src/pages/NoticiasPage.jsx` + `supabase/schema.sql`):** Sección superior exclusiva para comunicados creados/eliminados por el Administrador (con prioridad y vencimiento automático). Si no hay avisos vigentes, esa sección desaparece por completo mostrando únicamente las noticias.

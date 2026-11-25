@@ -706,7 +706,9 @@ export default function MapaPage() {
         const mapRows = data.filter(
           (row) =>
             row.badge !== '🚩 Reporte Feria' &&
-            !String(row.extra || '').includes('"feria_report"')
+            row.badge !== '📢 Aviso Admin' &&
+            !String(row.extra || '').includes('"feria_report"') &&
+            !String(row.extra || '').includes('"admin_announcement"')
         );
         const mapped = mapRows.map((row) => {
           const parsed = parseExtraJson(row.extra);

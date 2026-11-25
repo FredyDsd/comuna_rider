@@ -121,7 +121,17 @@ export default function PerfilPage() {
       ]);
 
       if (profilesData) setModProfiles(profilesData);
-      if (alertsData) setModAlerts(alertsData);
+      if (alertsData) {
+        setModAlerts(
+          alertsData.filter(
+            (row) =>
+              row.badge !== '🚩 Reporte Feria' &&
+              row.badge !== '📢 Aviso Admin' &&
+              !String(row.extra || '').includes('"feria_report"') &&
+              !String(row.extra || '').includes('"admin_announcement"')
+          )
+        );
+      }
     } catch (err) {
       console.warn('Error cargando datos de moderación:', err);
     } finally {
@@ -556,8 +566,8 @@ export default function PerfilPage() {
                 </span>
                 <span>
                   Ingresás como <strong className="text-on-surface">Nivel 1 (Ciudadano)</strong> con
-                  acceso a reportar en el Mapa y usar el Directorio. Si sos cadete, luego podrás
-                  validar tu WhatsApp para habilitar Turnos, Calculadora y Mercado.
+                  acceso a reportar en el Mapa y ver la Feria. Si sos cadete, luego podrás
+                  validar tu WhatsApp para habilitar Turnos y Avisos y Noticias.
                 </span>
               </div>
             )}
@@ -610,7 +620,7 @@ export default function PerfilPage() {
                       ¿Sos Cadete en Jujuy?
                     </h2>
                     <p className="font-body-sm text-body-sm text-secondary">
-                      Desbloqueá Turnos, Calculadora y Mercado Cadete (Nivel 2)
+                      Desbloqueá Turnos y Avisos y Noticias (Nivel 2)
                     </p>
                   </div>
                 </div>

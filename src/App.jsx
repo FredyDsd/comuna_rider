@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import MapaPage from './pages/MapaPage';
 import TurnosPage from './pages/TurnosPage';
-import CalculadoraPage from './pages/CalculadoraPage';
+import NoticiasPage from './pages/NoticiasPage';
 import DirectorioPage from './pages/DirectorioPage';
 import PerfilPage from './pages/PerfilPage';
 
@@ -34,13 +34,14 @@ export default function App() {
               }
             />
             <Route
-              path="calculadora"
+              path="noticias"
               element={
                 <CadeteOnlyRoute>
-                  <CalculadoraPage />
+                  <NoticiasPage />
                 </CadeteOnlyRoute>
               }
             />
+            <Route path="calculadora" element={<Navigate to="/noticias" replace />} />
             <Route path="directorio" element={<DirectorioPage />} />
             <Route path="perfil" element={<PerfilPage />} />
             {/* Fallback */}

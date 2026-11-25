@@ -58,7 +58,7 @@ export const ROLES_INFO = {
     name: 'Ciudadano Registrado',
     badge: 'Nivel 1 • Ciudadano',
     description:
-      'Usuario registrado base. Puede ver y aportar alertas al Mapa y usar el Directorio. No ve Turnos, Calculadora ni Mercado hasta ser verificado como Cadete.',
+      'Usuario registrado base. Puede ver y aportar alertas al Mapa y ver la Feria. No ve Turnos ni Avisos y Noticias hasta ser verificado como Cadete.',
   },
   cadete_verificado: {
     level: 2,
@@ -66,7 +66,7 @@ export const ROLES_INFO = {
     name: 'Cadete Verificado',
     badge: 'Nivel 2 • Cadete Verificado',
     description:
-      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Calculadora y Mercado Cadete.',
+      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Avisos y Noticias y Feria.',
   },
   cadete_emprendedor: {
     level: 3,
@@ -364,7 +364,7 @@ export function AuthProvider({ children }) {
       ['ciudadano', 'visitante', 'cadete_verificado', 'cadete_emprendedor', 'admin'].includes(role)
   );
 
-  // 2. Herramientas exclusivas de Cadetes (Turnos, Calculadora, ver Mercado Cadete): solo Nivel 2, 3 y 4
+  // 2. Herramientas exclusivas de Cadetes (Turnos, Avisos y Noticias): solo Nivel 2, 3 y 4
   const canUseCadeteTools = Boolean(
     user && !isBanned && ['cadete_verificado', 'cadete_emprendedor', 'admin'].includes(role)
   );
