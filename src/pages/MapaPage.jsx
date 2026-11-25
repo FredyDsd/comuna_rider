@@ -1880,10 +1880,12 @@ export default function MapaPage() {
               id="btn-map-sos"
               onClick={handleOpenSosModal}
               type="button"
-              className="pointer-events-auto h-11 rounded-full px-3.5 bg-error text-on-error flex items-center justify-center gap-1.5 shadow-[0_6px_18px_rgba(220,38,38,0.45)] font-label-md text-label-md font-black uppercase tracking-wider active:scale-95 transition-transform"
+              title="Pedir Auxilio SOS"
+              className="pointer-events-auto w-12 h-12 rounded-full bg-error text-on-error flex items-center justify-center shadow-[0_6px_18px_rgba(220,38,38,0.5)] border-2 border-white active:scale-95 transition-transform flex-shrink-0"
             >
-              <span className="material-symbols-outlined text-lg animate-pulse">emergency</span>
-              <span>SOS</span>
+              <span className="font-label-md text-xs font-black tracking-wider leading-none">
+                SOS
+              </span>
             </button>
           )}
 

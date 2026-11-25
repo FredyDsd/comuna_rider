@@ -62,6 +62,19 @@ export function AuthProvider({ children }) {
         .maybeSingle();
 
       if (existing && !fetchError) {
+        if (!existing.whatsapp && (extraMeta.whatsapp || authUser.user_metadata?.whatsapp)) {
+          const syncedWhatsapp = extraMeta.whatsapp || authUser.user_metadata?.whatsapp;
+          const { data: updatedExisting } = await supabase
+            .from('profiles')
+            .update({ whatsapp: syncedWhatsapp, updated_at: new Date().toISOString() })
+            .eq('id', authUser.id)
+            .select()
+            .single();
+          if (updatedExisting) {
+            setProfile(updatedExisting);
+            return updatedExisting;
+          }
+        }
         setProfile(existing);
         return existing;
       }
@@ -76,6 +89,7 @@ export function AuthProvider({ children }) {
           'Vecino Jujuy',
         role: 'ciudadano',
         verification_status: 'none',
+        whatsapp: extraMeta.whatsapp || authUser.user_metadata?.whatsapp || '',
         vehicle: extraMeta.vehicle || authUser.user_metadata?.vehicle || 'Moto',
         zone: extraMeta.zone || authUser.user_metadata?.zone || 'Centro',
         status: 'online',
@@ -148,7 +162,14 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signUpWithEmail = async ({ email, password, fullName, vehicle = 'Moto', zone = 'Centro' }) => {
+  const signUpWithEmail = async ({
+    email,
+    password,
+    fullName,
+    whatsapp = '',
+    vehicle = 'Moto',
+    zone = 'Centro',
+  }) => {
     if (!isSupabaseConfigured) {
       throw new Error('Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY primero.');
     }
@@ -159,6 +180,7 @@ export function AuthProvider({ children }) {
       options: {
         data: {
           full_name: fullName,
+          whatsapp,
           role: 'ciudadano',
           vehicle,
           zone,
@@ -171,6 +193,7 @@ export function AuthProvider({ children }) {
     if (data?.user) {
       await ensureProfile(data.user, {
         full_name: fullName,
+        whatsapp,
         role: 'ciudadano',
         vehicle,
         zone,

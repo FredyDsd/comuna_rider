@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -194,15 +194,19 @@ export default function TurnosPage() {
     [calendarDays, todayIso]
   );
 
-  // Vistas: 'general' (todos los turnos publicados) | 'mine' (mis horarios publicados)
+  // Vistas: 'general' (todos los turnos publicados) | 'mine' (mis horarios publicados + publicar)
   const [viewMode, setViewMode] = useState('general');
-  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = Semana Actual, 1 = Semana Siguiente
   const [selectedDay, setSelectedDay] = useState(todayIso);
   const [activeFilter, setActiveFilter] = useState('all');
 
+  // Refs para deslizar la tira de 14 días con mouse o dedo
+  const daysStripRef = useRef(null);
+  const modalDaysStripRef = useRef(null);
+  const stripDragRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
+  const modalStripDragRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
+
   // Modal de publicación
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishWeek, setPublishWeek] = useState(0);
   const [publishDay, setPublishDay] = useState(todayIso);
   const [publishType, setPublishType] = useState('ceder');
   const [publishZone, setPublishZone] = useState('Centro');
@@ -216,11 +220,13 @@ export default function TurnosPage() {
   const [dbShifts, setDbShifts] = useState([]);
   const [deletedSeedIds, setDeletedSeedIds] = useState([]);
 
+  const hasSavedPhoneInProfile = hasValidPhone(profile?.whatsapp);
+
   useEffect(() => {
-    if (hasValidPhone(profile?.whatsapp)) {
+    if (hasSavedPhoneInProfile) {
       setPublishWhatsapp(formatArPhone(profile.whatsapp));
     }
-  }, [profile?.whatsapp]);
+  }, [hasSavedPhoneInProfile, profile?.whatsapp]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -247,7 +253,6 @@ export default function TurnosPage() {
 
       if (error || !data) return;
 
-      // Buscar WhatsApp actualizado en profiles para dueños que publicaron sin número embebido
       const ownerIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
       let phoneByUserId = {};
       if (ownerIds.length > 0) {
@@ -335,14 +340,30 @@ export default function TurnosPage() {
       .sort((a, b) => (a.day_id || '').localeCompare(b.day_id || ''));
   }, [allShifts, user]);
 
-  const handleSelectWeek = (weekIdx) => {
-    setSelectedWeek(weekIdx);
-    const weekDays = calendarDays.filter((d) => d.weekIndex === weekIdx);
-    const currentStillInWeek = weekDays.some((d) => d.id === selectedDay);
-    if (!currentStillInWeek && weekDays[0]) {
-      setSelectedDay(weekIdx === 0 && weekDays.some((d) => d.id === todayIso) ? todayIso : weekDays[0].id);
-    }
-  };
+  const createMouseDragHandlers = (containerRef, dragStateRef) => ({
+    onMouseDown: (e) => {
+      const el = containerRef.current;
+      if (!el) return;
+      dragStateRef.current = {
+        isDown: true,
+        startX: e.pageX - el.offsetLeft,
+        scrollLeft: el.scrollLeft,
+      };
+    },
+    onMouseLeave: () => {
+      dragStateRef.current.isDown = false;
+    },
+    onMouseUp: () => {
+      dragStateRef.current.isDown = false;
+    },
+    onMouseMove: (e) => {
+      if (!dragStateRef.current.isDown || !containerRef.current) return;
+      e.preventDefault();
+      const x = e.pageX - containerRef.current.offsetLeft;
+      const walk = (x - dragStateRef.current.startX) * 1.4;
+      containerRef.current.scrollLeft = dragStateRef.current.scrollLeft - walk;
+    },
+  });
 
   const handleOpenPublishModal = () => {
     if (!canUseCadeteTools) {
@@ -355,12 +376,8 @@ export default function TurnosPage() {
       }
       return;
     }
-    const dayObj = dayLookup[selectedDay];
-    setPublishWeek(dayObj ? dayObj.weekIndex : selectedWeek);
     setPublishDay(selectedDay);
-    setPublishWhatsapp(
-      hasValidPhone(profile?.whatsapp) ? formatArPhone(profile.whatsapp) : '+54 9 388 '
-    );
+    setPublishWhatsapp(hasSavedPhoneInProfile ? formatArPhone(profile.whatsapp) : '+54 9 388 ');
     setIsPublishModalOpen(true);
   };
 
@@ -396,20 +413,21 @@ export default function TurnosPage() {
       return;
     }
 
-    if (!hasValidPhone(publishWhatsapp)) {
-      alert('Ingresá un WhatsApp válido (con característica) para que puedan pedirte el turno.');
+    const rawPhone = hasSavedPhoneInProfile ? profile.whatsapp : publishWhatsapp;
+    if (!hasValidPhone(rawPhone)) {
+      alert('Ingresá un WhatsApp válido (con característica) para guardarlo en tu perfil.');
       return;
     }
 
     setSavingShift(true);
     const cadeteName = profile?.full_name || user.email?.split('@')[0] || 'Cadete Jujuy';
     const isSuelto = publishType === 'ceder';
-    const formattedPhone = formatArPhone(publishWhatsapp);
+    const formattedPhone = formatArPhone(rawPhone);
     const vehicle = profile?.vehicle || 'Moto';
     const cleanNote = publishComment.trim();
 
-    // Guardar WhatsApp en el perfil si aún no estaba registrado o cambió
-    if (!hasValidPhone(profile?.whatsapp) || formatArPhone(profile?.whatsapp) !== formattedPhone) {
+    // Si aún no tenía teléfono en su perfil, se guarda esta única vez en Supabase
+    if (!hasSavedPhoneInProfile) {
       updateProfile({ whatsapp: formattedPhone }).catch(() => {});
     }
 
@@ -460,10 +478,6 @@ export default function TurnosPage() {
         setDbShifts((prev) => [localShift, ...prev]);
       }
 
-      const publishedDayObj = dayLookup[publishDay];
-      if (publishedDayObj) {
-        setSelectedWeek(publishedDayObj.weekIndex);
-      }
       setSelectedDay(publishDay);
       setPublishComment('');
       setIsPublishModalOpen(false);
@@ -497,16 +511,6 @@ export default function TurnosPage() {
       alert(`No se pudo borrar tu turno: ${err.message}`);
     }
   };
-
-  const visibleWeekDays = useMemo(
-    () => calendarDays.filter((d) => d.weekIndex === selectedWeek),
-    [calendarDays, selectedWeek]
-  );
-
-  const modalWeekDays = useMemo(
-    () => calendarDays.filter((d) => d.weekIndex === publishWeek),
-    [calendarDays, publishWeek]
-  );
 
   const filteredGeneralShifts = allShifts.filter((s) => {
     if (s.day_id !== selectedDay) return false;
@@ -572,36 +576,19 @@ export default function TurnosPage() {
           </button>
         </div>
 
-        {/* Calendario de 2 Semanas (Lunes a Domingo) para la Vista General */}
+        {/* Tira horizontal deslizable continua de los 14 días (2 semanas Lun a Dom) */}
         {viewMode === 'general' && (
-          <div className="space-y-2 pt-0.5">
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleSelectWeek(0)}
-                className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold transition-all ${
-                  selectedWeek === 0
-                    ? 'bg-inverse-surface text-inverse-on-surface shadow-xs'
-                    : 'bg-surface-container text-secondary'
-                }`}
-              >
-                Semana Actual (Lun–Dom)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectWeek(1)}
-                className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold transition-all ${
-                  selectedWeek === 1
-                    ? 'bg-inverse-surface text-inverse-on-surface shadow-xs'
-                    : 'bg-surface-container text-secondary'
-                }`}
-              >
-                Semana Siguiente (Lun–Dom)
-              </button>
+          <div className="space-y-1 pt-0.5">
+            <div className="flex items-center justify-between px-0.5 text-[10px] text-secondary font-bold">
+              <span>Deslizá horizontalmente ↔ (2 semanas Lun–Dom)</span>
+              <span>{dayLookup[selectedDay]?.fullLabel}</span>
             </div>
-
-            <div className="grid grid-cols-7 gap-1 pt-0.5">
-              {visibleWeekDays.map((day) => {
+            <div
+              ref={daysStripRef}
+              {...createMouseDragHandlers(daysStripRef, stripDragRef)}
+              className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5 touch-pan-x cursor-grab active:cursor-grabbing select-none"
+            >
+              {calendarDays.map((day) => {
                 const isSelected = selectedDay === day.id;
                 const dayCount = allShifts.filter((s) => s.day_id === day.id).length;
                 return (
@@ -609,7 +596,7 @@ export default function TurnosPage() {
                     key={day.id}
                     type="button"
                     onClick={() => setSelectedDay(day.id)}
-                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all active:scale-95 ${
+                    className={`flex-shrink-0 min-w-[66px] flex flex-col items-center justify-center py-2 px-2 rounded-xl transition-all active:scale-95 ${
                       isSelected
                         ? 'bg-primary-container text-on-primary-container shadow-md'
                         : day.isToday
@@ -622,10 +609,10 @@ export default function TurnosPage() {
                         isSelected ? 'opacity-90' : 'text-secondary'
                       }`}
                     >
-                      {day.dayShort}
+                      {day.isToday ? 'Hoy' : day.dayShort}
                     </span>
                     <span className="font-label-md text-[12px] font-extrabold leading-tight">
-                      {day.dateNumber.split('/')[0]}
+                      {day.dateNumber}
                     </span>
                     <span
                       className={`mt-1 px-1.5 rounded-full font-label-sm text-[9px] font-extrabold ${
@@ -646,7 +633,7 @@ export default function TurnosPage() {
         )}
       </div>
 
-      {/* Filtros rápidos (Solo Zonas PeYa reales: Centro y Los Perales + Modalidad) */}
+      {/* Filtros rápidos (Solo en Tablón General: Centro, Los Perales y Modalidad) */}
       {viewMode === 'general' && (
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
           {[
@@ -672,31 +659,35 @@ export default function TurnosPage() {
         </div>
       )}
 
-      {/* Banner de Publicación Rápida */}
-      <div className="relative overflow-hidden bg-primary-fixed/40 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-3 border border-primary-container/20">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
-            <span className="material-symbols-outlined text-xl">event_available</span>
+      {/* Única opción de Publicar Turno: Exclusivamente dentro de "Mis Horarios" */}
+      {viewMode === 'mine' && (
+        <div className="relative overflow-hidden bg-primary-fixed/40 rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-3 border border-primary-container/20">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
+              <span className="material-symbols-outlined text-xl">event_available</span>
+            </div>
+            <div className="min-w-0">
+              <p className="font-label-lg text-label-lg text-on-primary-fixed font-extrabold truncate">
+                Publicar nuevo horario
+              </p>
+              <p className="font-body-sm text-body-sm text-on-primary-fixed-variant truncate">
+                {hasSavedPhoneInProfile
+                  ? `Usa tu WhatsApp guardado (${formatArPhone(profile.whatsapp)})`
+                  : 'Aparecerá en el Tablón General'}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="font-label-lg text-label-lg text-on-primary-fixed font-extrabold truncate">
-              ¿Liberás o cambiás turno?
-            </p>
-            <p className="font-body-sm text-body-sm text-on-primary-fixed-variant truncate">
-              Publicá tu horario y te escriben por WhatsApp
-            </p>
-          </div>
+          <button
+            id="btn-publicar"
+            type="button"
+            onClick={handleOpenPublishModal}
+            className="h-10 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-base">add_circle</span>
+            Publicar
+          </button>
         </div>
-        <button
-          id="btn-publicar"
-          type="button"
-          onClick={handleOpenPublishModal}
-          className="h-10 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all flex-shrink-0"
-        >
-          <span className="material-symbols-outlined text-base">add_circle</span>
-          Publicar
-        </button>
-      </div>
+      )}
 
       {/* Listado de Turnos (Tablón General o Mis Horarios Publicados) */}
       <div className="space-y-3">
@@ -706,21 +697,13 @@ export default function TurnosPage() {
             <p className="font-headline-md text-headline-md text-on-surface font-extrabold">
               {viewMode === 'mine'
                 ? 'Todavía no publicaste ningún horario'
-                : 'Sin turnos publicados en este filtro'}
+                : 'Sin turnos publicados para este día'}
             </p>
             <p className="font-body-sm text-body-sm text-secondary max-w-xs">
               {viewMode === 'mine'
-                ? 'Cuando publiques un turno para ceder o permutar aparecerá acá y solo vos podrás borrarlo.'
-                : 'Elegí otro día de estas 2 semanas o publicá tu franja en Centro o Los Perales.'}
+                ? 'Tocá el botón "Publicar" arriba para ofrecer un turno en Centro o Los Perales. Solo vos podrás borrar tus horarios.'
+                : 'Deslizá los días arriba o filtrá por Centro / Los Perales. Si querés liberar un turno, entrá a "Mis Horarios".'}
             </p>
-            <button
-              type="button"
-              onClick={handleOpenPublishModal}
-              className="mt-1 h-9 px-4 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-transform"
-            >
-              <span className="material-symbols-outlined text-sm">add_circle</span>
-              Publicar Turno
-            </button>
           </div>
         ) : (
           displayedShifts.map((shift) => {
@@ -832,7 +815,7 @@ export default function TurnosPage() {
         )}
       </div>
 
-      {/* Modal Publicar Franja (2 semanas Lun-Dom + Zonas reales Centro / Los Perales) */}
+      {/* Modal Publicar Franja (Tira deslizable de 14 días + Teléfono automático de BD) */}
       {isPublishModalOpen && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface-container-lowest w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-space-md shadow-2xl flex flex-col space-y-3">
@@ -850,58 +833,37 @@ export default function TurnosPage() {
             </div>
 
             <div className="space-y-3">
-              {/* Elegir Semana Actual o Semana Siguiente + Día Lun a Dom */}
+              {/* Tira horizontal deslizable continua de los 14 días (2 semanas Lun-Dom) */}
               <div>
-                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1.5">
-                  Día del Turno (Calendario 2 Semanas Lun–Dom)
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPublishWeek(0);
-                      const first = calendarDays.find((d) => d.weekIndex === 0);
-                      if (first) setPublishDay(first.id);
-                    }}
-                    className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold ${
-                      publishWeek === 0
-                        ? 'bg-inverse-surface text-inverse-on-surface'
-                        : 'bg-surface-container text-secondary'
-                    }`}
-                  >
-                    Semana Actual
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPublishWeek(1);
-                      const first = calendarDays.find((d) => d.weekIndex === 1);
-                      if (first) setPublishDay(first.id);
-                    }}
-                    className={`h-8 rounded-full font-label-sm text-label-sm font-extrabold ${
-                      publishWeek === 1
-                        ? 'bg-inverse-surface text-inverse-on-surface'
-                        : 'bg-surface-container text-secondary'
-                    }`}
-                  >
-                    Semana Siguiente
-                  </button>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-label-sm text-label-sm uppercase text-secondary font-bold">
+                    Elegí el Día (Deslizá ↔)
+                  </label>
+                  <span className="font-label-sm text-[11px] font-extrabold text-primary">
+                    {dayLookup[publishDay]?.fullLabel}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-7 gap-1">
-                  {modalWeekDays.map((d) => (
+                <div
+                  ref={modalDaysStripRef}
+                  {...createMouseDragHandlers(modalDaysStripRef, modalStripDragRef)}
+                  className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 touch-pan-x cursor-grab active:cursor-grabbing select-none"
+                >
+                  {calendarDays.map((d) => (
                     <button
                       key={d.id}
                       type="button"
                       onClick={() => setPublishDay(d.id)}
-                      className={`py-2 px-1 rounded-xl font-label-sm text-[11px] font-bold text-center transition-colors flex flex-col items-center ${
+                      className={`flex-shrink-0 min-w-[60px] py-2 px-2 rounded-xl font-label-sm text-[11px] font-bold text-center transition-colors flex flex-col items-center ${
                         publishDay === d.id
-                          ? 'bg-primary-container text-on-primary-container font-extrabold'
+                          ? 'bg-primary-container text-on-primary-container font-extrabold shadow-sm'
                           : 'bg-surface-container-low text-on-surface'
                       }`}
                     >
-                      <span className="text-[9px] uppercase opacity-80">{d.dayShort}</span>
-                      <span>{d.dateNumber.split('/')[0]}</span>
+                      <span className="text-[9px] uppercase opacity-80">
+                        {d.isToday ? 'Hoy' : d.dayShort}
+                      </span>
+                      <span>{d.dateNumber}</span>
                     </button>
                   ))}
                 </div>
@@ -985,19 +947,32 @@ export default function TurnosPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
-                  Tu WhatsApp para que te contacten
-                </label>
-                <input
-                  type="tel"
-                  value={publishWhatsapp}
-                  onChange={(e) => setPublishWhatsapp(e.target.value)}
-                  onBlur={() => setPublishWhatsapp((prev) => formatArPhone(prev))}
-                  placeholder="+54 9 388 4123456"
-                  className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none"
-                />
-              </div>
+              {/* Teléfono automático desde la BD (solo pide una vez si la cuenta aún no tiene uno) */}
+              {hasSavedPhoneInProfile ? (
+                <div className="px-3 py-2 rounded-xl bg-tertiary-container/15 border border-tertiary/30 flex items-center gap-2 text-[12px]">
+                  <span className="material-symbols-outlined text-base text-tertiary">
+                    verified
+                  </span>
+                  <span className="font-bold text-on-surface">
+                    Se usará tu WhatsApp registrado:{' '}
+                    <strong className="text-tertiary">{formatArPhone(profile.whatsapp)}</strong>
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
+                    Tu WhatsApp (se guardará en tu perfil para futuros turnos)
+                  </label>
+                  <input
+                    type="tel"
+                    value={publishWhatsapp}
+                    onChange={(e) => setPublishWhatsapp(e.target.value)}
+                    onBlur={() => setPublishWhatsapp((prev) => formatArPhone(prev))}
+                    placeholder="+54 9 388 4123456"
+                    className="w-full h-11 bg-surface-container-low rounded-xl px-3 font-body-md text-body-md text-on-surface outline-none border border-primary/30"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">

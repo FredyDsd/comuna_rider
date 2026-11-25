@@ -112,10 +112,13 @@ export default function PerfilPage() {
 
     try {
       if (authMode === 'register') {
+        const cleanDigits = whatsapp.replace(/\D/g, '');
+        const validWa = cleanDigits.length >= 8 ? whatsapp.trim() : '';
         const res = await signUpWithEmail({
           email,
           password,
           fullName: fullName.trim() || 'Vecino Jujuy',
+          whatsapp: validWa,
           vehicle,
           zone,
         });
@@ -421,6 +424,19 @@ export default function PerfilPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block font-label-sm text-label-sm uppercase text-secondary font-bold mb-1">
+                    WhatsApp (Opcional, para turnos y SOS)
+                  </label>
+                  <input
+                    type="tel"
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="+54 9 388 4123456"
+                    className="w-full h-12 px-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface focus:outline-none"
+                  />
                 </div>
               </>
             )}
