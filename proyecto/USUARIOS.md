@@ -13,12 +13,12 @@ Para abrir la participación comunitaria en el mapa de alertas a los vecinos de 
 
 ### 2. Nivel 2: "Cadete Verificado" (`cadete_verificado`)
 - **Validación:** Aprobado por un Administrador/Moderador (Nivel 4) tras validar su solicitud y número de WhatsApp.
-- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (usando automáticamente su `profiles.whatsapp` al publicar en "Mis horarios"), **Calculadora Financiera** y **Botón SOS**.
+- **Permisos:** Acceso completo al **Mapa de Alertas**, **Tablón de Turnos** (requiere además tener foto de perfil aprobada para publicar en "Mis horarios", tomando su `profiles.whatsapp`), **Calculadora Financiera** y **Botón SOS**.
 - **Publicación en Feria:** Aunque sea Nivel 2, para publicar avisos en **«Mulitas emprendedoras»** también debe cargar una foto de perfil propia y recibir aprobación del Administrador.
 
 ### 3. Nivel 3: "Cadete Emprendedor" (`cadete_emprendedor`)
 - **Validación:** Usuario con foto de perfil real (`360x360` JPEG guardada en `profiles.avatar_url`) aprobada por un Administrador (`verification_status = 'approved'`).
-- **Permisos:** Todo lo del Nivel 2, más permiso habilitado para publicar productos y emprendimientos en la Feria **«Mulitas emprendedoras»** (`/directorio`) con sello `"Verificado"`.
+- **Permisos:** Todo lo del Nivel 2, más permiso habilitado para publicar productos y emprendimientos en la Feria **«Mulitas emprendedoras»** (`/directorio`). Las tarjetas no muestran sello de "Vendedor Confiable"; cualquier compañero puede reportar avisos mediante el ícono de bandera (`flag`).
 
 ### 4. Nivel 4: "Administrador / Moderador" (`admin`)
 - **Permisos:**

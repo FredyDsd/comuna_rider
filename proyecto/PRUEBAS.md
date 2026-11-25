@@ -21,3 +21,9 @@
 - **Zoom Admin y Rechazo de Foto:**
   - Al tocar la miniatura de un solicitante o usuario (en Feria o en el Panel de Moderación de `/perfil`), se abre el modal Lightbox ampliado con su foto `360x360`.
   - Al pulsar **Rechazar Foto**: desaparece de pendientes, `avatar_url` vuelve a `DEFAULT_AVATAR_URL`, `verification_status` pasa a `'rejected'`, un usuario `cadete_verificado` conserva su nivel 2 operativo y en su `/perfil` ve `❌ Foto rechazada por el Admin` pudiendo subir una nueva foto para volver a revisión.
+- **Feria sin "Vendedor Confiable", Pop-up WhatsApp y Reportes:**
+  - Las tarjetas de Feria no muestran `"Vendedor Confiable"` ni `"Verificado"`.
+  - Al tocar **"Charlar"**, aparece el pop-up de exención de responsabilidad de Comuna Rider y solo al pulsar **"Continuar"** se abre WhatsApp.
+  - Al tocar la bandera (`flag`), enviar un reporte con motivo lo envía al panel de reportes del Administrador en Feria (sin contaminar los pines del mapa) para poder borrar la publicación o descartar el reporte.
+- **Requisito de Foto en Turnos:**
+  - Un usuario sin foto aprobada que pulsa **Publicar** en **"Mis horarios"** ve el aviso de espacio seguro comunitario y puede ir directo a `/perfil` a subir su foto.

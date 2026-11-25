@@ -46,11 +46,16 @@
 
 ---
 
-### ✅ Fase 6 - Refinamiento UX, Seguridad de Foto en Feria y Despliegue (COMPLETADA)
+### ✅ Fase 6 - Refinamiento UX, Seguridad Comunitaria y Despliegue (COMPLETADA)
 - **Botón SOS Global Arrastrable (`src/components/Layout.jsx`):** Botón circular centrado con texto `SOS`, posicionamiento arrastrable libre con límites seguros (sin recortes en móviles), guardado en `localStorage` y oculto en `/perfil`.
-- **Verificación de Foto para Publicar en Feria:**
-  - Redirección directa desde Feria hacia `/perfil` con resaltado de la tarjeta de foto de perfil (sin tarjeta de anuncio extra en `/perfil`).
+- **Verificación de Foto para Publicar en Feria y Turnos:**
+  - Redirección directa desde Feria y desde el modal de seguridad en Turnos hacia `/perfil` con resaltado de la tarjeta de foto de perfil (sin tarjeta de anuncio extra en `/perfil`).
+  - En `/turnos`, publicar turnos también exige `hasApprovedPhoto`, mostrando un aviso cálido de espacio seguro comunitario si aún no cuenta con foto aprobada.
   - Auto-aprobación instantánea cuando el usuario tiene rol `admin`.
   - Compresión mejorada a `360x360` y modal Lightbox para que el Administrador amplíe la foto de solicitantes y usuarios antes de aprobar o rechazar.
   - Lógica completa de rechazo: restaura `DEFAULT_AVATAR_URL`, fija `verification_status = 'rejected'`, conserva `cadete_verificado` y permite reenvío al subir una nueva foto.
+- **Control Comunitario y Exención de Responsabilidad en Feria:**
+  - Eliminadas las etiquetas de `"Vendedor Confiable"` y `"Verificado"` en tarjetas de Feria.
+  - Pop-up previo a WhatsApp aclarando el carácter gratuito y sin responsabilidad de Comuna Rider sobre ventas entre usuarios.
+  - Botón de bandera (`flag`) para reportar publicaciones con motivo de texto y panel exclusivo para que el Administrador borre la publicación o descarte el reporte.
 - **Producción:** Desplegado en Vercel (`https://comunarider.vercel.app`) sincronizado con `origin/master`.

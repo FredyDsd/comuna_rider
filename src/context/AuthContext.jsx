@@ -383,6 +383,14 @@ export function AuthProvider({ children }) {
         (role === 'cadete_emprendedor' && profile?.verification_status === 'approved'))
   );
 
+  // Foto de perfil propia aprobada (requerida para publicar turnos y herramientas comunitarias)
+  const hasApprovedPhoto = Boolean(
+    user &&
+      !isBanned &&
+      hasCustomPhoto &&
+      (role === 'admin' || profile?.verification_status === 'approved')
+  );
+
   // 4. Moderador (Nivel 4): aprueba solicitudes, borra alertas y banea
   const isAdmin = Boolean(user && !isBanned && role === 'admin');
 
@@ -396,6 +404,7 @@ export function AuthProvider({ children }) {
         loading,
         isBanned,
         hasCustomPhoto,
+        hasApprovedPhoto,
         isSupabaseConfigured,
         canWriteMap,
         canUseCadeteTools,

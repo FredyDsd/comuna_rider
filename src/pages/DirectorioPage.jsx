@@ -122,6 +122,14 @@ export default function DirectorioPage() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [expandedPhotoUser, setExpandedPhotoUser] = useState(null);
 
+  // Aviso de responsabilidad previo a WhatsApp y reportes comunitarios
+  const [whatsAppConfirmData, setWhatsAppConfirmData] = useState(null);
+  const [reportingItem, setReportingItem] = useState(null);
+  const [reportReason, setReportReason] = useState('');
+  const [sendingReport, setSendingReport] = useState(false);
+  const [feriaReports, setFeriaReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
   const hasCustomPhoto = hasCustomProfilePhoto(profile);
 
   useEffect(() => {
@@ -205,22 +213,68 @@ export default function DirectorioPage() {
     }
   }, [isAdmin]);
 
+  const fetchFeriaReports = useCallback(async () => {
+    if (!isSupabaseConfigured || !isAdmin) {
+      setFeriaReports([]);
+      return;
+    }
+    setLoadingReports(true);
+    try {
+      const { data, error } = await supabase
+        .from('alerts')
+        .select('*')
+        .eq('badge', '🚩 Reporte Feria')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        const mapped = data.map((row) => {
+          let parsed = {};
+          try {
+            parsed = row.extra ? JSON.parse(row.extra) : {};
+          } catch {
+            parsed = {};
+          }
+          return {
+            id: row.id,
+            reporterName: row.author_name || 'Compañero Rider',
+            reason: row.description || '',
+            createdAt: row.created_at,
+            itemId: parsed.itemId || null,
+            itemTitle: parsed.itemTitle || row.title || 'Publicación reportada',
+            itemPrice: parsed.itemPrice || '',
+            sellerName: parsed.sellerName || '',
+            sellerUserId: parsed.sellerUserId || null,
+          };
+        });
+        setFeriaReports(mapped);
+      }
+    } catch (err) {
+      console.warn('Error cargando reportes de Feria:', err);
+    } finally {
+      setLoadingReports(false);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     fetchFeriaItems();
     fetchPendingPhotoRequests();
+    fetchFeriaReports();
 
     if (!isSupabaseConfigured) return;
     const channel = supabase
-      .channel('public:directory_items')
+      .channel('public:directory_items_and_reports')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'directory_items' }, () => {
         fetchFeriaItems();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, () => {
+        if (isAdmin) fetchFeriaReports();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchFeriaItems, fetchPendingPhotoRequests]);
+  }, [fetchFeriaItems, fetchPendingPhotoRequests, fetchFeriaReports, isAdmin]);
 
   const handleAdminPhotoDecision = async (reqUser, approve) => {
     if (!isAdmin || !isSupabaseConfigured) return;
@@ -403,14 +457,135 @@ export default function DirectorioPage() {
     }
   };
 
-  const handleOpenWhatsApp = (phone, text) => {
+  const handleOpenWhatsApp = (phone, text, item = null) => {
+    setWhatsAppConfirmData({
+      phone,
+      text,
+      seller: item?.seller || 'el vendedor',
+      title: item?.title || 'esta publicación',
+    });
+  };
+
+  const handleProceedToWhatsApp = () => {
+    if (!whatsAppConfirmData) return;
+    const { phone, text } = whatsAppConfirmData;
     const cleanPhone = (phone || '5493884123456').replace(/\D/g, '');
+    setWhatsAppConfirmData(null);
     showToast('Abriendo chat de WhatsApp...');
     window.open(
       `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`,
       '_blank',
       'noopener,noreferrer'
     );
+  };
+
+  const handleOpenReportModal = (item) => {
+    if (!user) {
+      if (
+        window.confirm(
+          '🚩 Iniciá sesión para poder reportar publicaciones al Administrador. ¿Ir a Mi Perfil?'
+        )
+      ) {
+        navigate('/perfil');
+      }
+      return;
+    }
+    setReportingItem(item);
+    setReportReason('');
+  };
+
+  const handleSubmitReport = async () => {
+    if (!user || !reportingItem) return;
+    const cleanReason = reportReason.trim();
+    if (cleanReason.length < 4) {
+      alert('Escribí brevemente el motivo del reporte para que el Administrador pueda revisarlo.');
+      return;
+    }
+    setSendingReport(true);
+    try {
+      const reporterName =
+        profile?.full_name || user.email?.split('@')[0] || 'Rider Jujuy';
+      const reportPayload = {
+        user_id: user.id,
+        author_name: reporterName,
+        vehicle: profile?.vehicle || 'Moto',
+        type: 'security',
+        category: 'cuponeros',
+        badge: '🚩 Reporte Feria',
+        title: `Reporte: ${reportingItem.title}`,
+        description: cleanReason,
+        zone: reportingItem.zone || 'Centro',
+        extra: JSON.stringify({
+          subType: 'feria_report',
+          itemId: reportingItem.id,
+          itemTitle: reportingItem.title,
+          itemPrice: reportingItem.price,
+          sellerName: reportingItem.seller,
+          sellerUserId: reportingItem.user_id || null,
+        }),
+      };
+
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('alerts').insert(reportPayload);
+        if (error) throw error;
+        if (isAdmin) await fetchFeriaReports();
+      } else {
+        setFeriaReports((prev) => [
+          {
+            id: `local-rep-${Date.now()}`,
+            reporterName,
+            reason: cleanReason,
+            itemId: reportingItem.id,
+            itemTitle: reportingItem.title,
+            itemPrice: reportingItem.price,
+            sellerName: reportingItem.seller,
+          },
+          ...prev,
+        ]);
+      }
+
+      setReportingItem(null);
+      setReportReason('');
+      showToast('🚩 Reporte enviado al Administrador para revisión.');
+    } catch (err) {
+      alert(`No se pudo enviar el reporte: ${err.message}`);
+    } finally {
+      setSendingReport(false);
+    }
+  };
+
+  const handleAdminResolveReport = async (report, deletePublication) => {
+    if (!isAdmin) return;
+    try {
+      if (deletePublication && report.itemId) {
+        if (
+          isSupabaseConfigured &&
+          !String(report.itemId).startsWith('seed-') &&
+          !String(report.itemId).startsWith('local-')
+        ) {
+          const { error: delItemErr } = await supabase
+            .from('directory_items')
+            .delete()
+            .eq('id', report.itemId);
+          if (delItemErr) throw delItemErr;
+        }
+        setMarketplaceItems((prev) => prev.filter((item) => item.id !== report.itemId));
+      }
+
+      if (isSupabaseConfigured && !String(report.id).startsWith('local-')) {
+        const { error: delAlertErr } = await supabase.from('alerts').delete().eq('id', report.id);
+        if (delAlertErr) throw delAlertErr;
+      }
+
+      setFeriaReports((prev) => prev.filter((r) => r.id !== report.id));
+      showToast(
+        deletePublication
+          ? '🗑️ Publicación eliminada y reporte cerrado.'
+          : '✅ Reporte descartado.'
+      );
+    } catch (err) {
+      alert(`No se pudo resolver el reporte: ${err.message}`);
+    }
   };
 
   const filteredFeria = marketplaceItems.filter((item) => {
@@ -618,6 +793,77 @@ export default function DirectorioPage() {
         </section>
       )}
 
+      {/* TARJETA ADMIN: Publicaciones Reportadas por la Comunidad */}
+      {isAdmin && feriaReports.length > 0 && (
+        <section className="bg-surface-container-lowest rounded-xl p-space-md shadow-md border-2 border-error space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-error text-xl">flag</span>
+              <h2 className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                🚩 Publicaciones Reportadas ({feriaReports.length})
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={fetchFeriaReports}
+              className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0"
+              title="Actualizar reportes"
+            >
+              <span
+                className={`material-symbols-outlined text-base ${
+                  loadingReports ? 'animate-spin' : ''
+                }`}
+              >
+                refresh
+              </span>
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {feriaReports.map((rep) => (
+              <div
+                key={rep.id}
+                className="p-3 rounded-xl bg-error-container/25 border border-error/35 space-y-2"
+              >
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                      {rep.itemTitle} {rep.itemPrice ? `(${rep.itemPrice})` : ''}
+                    </p>
+                  </div>
+                  <p className="font-body-sm text-[11px] text-secondary">
+                    Vendedor: <strong className="text-on-surface">{rep.sellerName || 'Rider'}</strong> • Reportó:{' '}
+                    <strong className="text-on-surface">{rep.reporterName}</strong>
+                  </p>
+                  <p className="font-body-sm text-body-sm text-on-surface bg-surface-container-lowest/90 p-2 rounded-lg border border-surface-container mt-1">
+                    “{rep.reason}”
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAdminResolveReport(rep, true)}
+                    className="h-9 rounded-lg bg-error text-on-error font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    Borrar Publicación
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAdminResolveReport(rep, false)}
+                    className="h-9 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-sm">check</span>
+                    Descartar Reporte
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Feed Exclusivo de la Feria Rider */}
       {filteredFeria.length === 0 ? (
         <div className="bg-surface-container-lowest rounded-xl p-6 text-center space-y-2 border border-surface-container/60 shadow-sm">
@@ -639,11 +885,8 @@ export default function DirectorioPage() {
                 className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm flex flex-col border border-surface-container/50"
               >
                 <div className="flex p-3 gap-space-sm">
-                  <div className="w-24 h-24 rounded-lg bg-surface-container overflow-hidden flex-shrink-0 relative">
+                  <div className="w-24 h-24 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
                     <img className="w-full h-full object-cover" src={item.image} alt={item.title} />
-                    <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-inverse-surface/80 text-inverse-on-surface font-label-sm text-[9px] uppercase font-bold">
-                      {item.badge}
-                    </span>
                   </div>
                   <div className="flex flex-col justify-between min-w-0 flex-1">
                     <div>
@@ -652,15 +895,14 @@ export default function DirectorioPage() {
                           {item.price}
                         </span>
                         <div className="flex items-center gap-1">
-                          {item.verifiedSeller && (
-                            <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-tertiary-container/15 text-tertiary font-label-sm text-[9px] font-bold"
-                              title="Vendedor verificado por el Administrador"
-                            >
-                              <span className="material-symbols-outlined text-xs">verified</span>
-                              Verificado
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReportModal(item)}
+                            className="text-secondary hover:text-error p-1 rounded-full hover:bg-error-container/30 transition-colors"
+                            title="Reportar publicación al Administrador"
+                          >
+                            <span className="material-symbols-outlined text-base">flag</span>
+                          </button>
                           {canDelete && (
                             <button
                               type="button"
@@ -690,7 +932,8 @@ export default function DirectorioPage() {
                         onClick={() =>
                           handleOpenWhatsApp(
                             item.phone,
-                            `Hola ${item.seller}, vi tu aviso "${item.title}" (${item.price}) en Mulitas Emprendedoras de Comuna Rider Jujuy.`
+                            `Hola ${item.seller}, vi tu aviso "${item.title}" (${item.price}) en Mulitas Emprendedoras de Comuna Rider Jujuy.`,
+                            item
                           )
                         }
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-tertiary-container text-on-tertiary-container font-label-sm text-label-sm font-bold active:scale-95 transition-transform flex-shrink-0"
@@ -900,6 +1143,146 @@ export default function DirectorioPage() {
                 className="w-full h-12 bg-primary-container text-on-primary-container rounded-full font-label-lg text-label-lg font-bold shadow-md active:scale-95 transition-transform"
               >
                 {savingItem ? 'Publicando en Supabase...' : 'Publicar en Mulitas Emprendedoras'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AVISO RESPONSABILIDAD PREVIO A WHATSAPP */}
+      {whatsAppConfirmData && (
+        <div
+          onClick={() => setWhatsAppConfirmData(null)}
+          className="fixed inset-0 z-[115] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest w-full max-w-sm rounded-2xl p-space-md shadow-2xl space-y-3"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-2xl">info</span>
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold leading-tight">
+                  Antes de contactar al vendedor
+                </h3>
+                <p className="font-body-sm text-[11px] text-secondary truncate">
+                  {whatsAppConfirmData.title} • {whatsAppConfirmData.seller}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high font-body-sm text-body-sm text-on-surface leading-relaxed space-y-1.5">
+              <p>
+                <strong>Comuna Rider</strong> es una herramienta gratuita y comunitaria para
+                repartidores. No cobra comisiones ni interviene en las ventas, por lo que{' '}
+                <strong>no asume responsabilidad</strong> por los productos publicados ni los acuerdos
+                entre integrantes.
+              </p>
+              <p className="text-[11px] text-secondary font-bold">
+                💡 Revisá siempre el producto en persona antes de realizar pagos.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setWhatsAppConfirmData(null)}
+                className="h-11 rounded-full bg-surface-container text-secondary font-label-md text-label-md font-bold active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleProceedToWhatsApp}
+                className="h-11 rounded-full bg-tertiary-container text-on-tertiary-container font-label-md text-label-md font-extrabold flex items-center justify-center gap-1 shadow-md active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">chat</span>
+                Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REPORTAR PUBLICACIÓN (BANDERA COMUNITARIA) */}
+      {reportingItem && (
+        <div
+          onClick={() => setReportingItem(null)}
+          className="fixed inset-0 z-[115] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest w-full max-w-sm rounded-2xl p-space-md shadow-2xl space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-error text-2xl">flag</span>
+                <div className="min-w-0">
+                  <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold leading-tight">
+                    Reportar Publicación
+                  </h3>
+                  <p className="font-body-sm text-[11px] text-secondary truncate">
+                    {reportingItem.title} • {reportingItem.seller}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportingItem(null)}
+                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'Posible estafa / perfil dudoso',
+                'Producto prohibido o inapropiado',
+                'Precio o descripción engañosa',
+              ].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setReportReason(preset)}
+                  className="px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-[10px] font-bold hover:bg-error-container/40"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label className="block font-label-sm text-label-sm text-secondary font-bold mb-1">
+                Motivo del reporte (lo revisará el Administrador)
+              </label>
+              <textarea
+                rows={3}
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                placeholder="Contanos qué viste mal en esta publicación..."
+                className="w-full p-3 rounded-xl bg-surface-container font-body-sm text-body-sm text-on-surface focus:outline-none resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setReportingItem(null)}
+                className="h-11 rounded-full bg-surface-container text-secondary font-label-md text-label-md font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={sendingReport}
+                onClick={handleSubmitReport}
+                className="h-11 rounded-full bg-error text-on-error font-label-md text-label-md font-extrabold flex items-center justify-center gap-1 shadow-md active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">send</span>
+                {sendingReport ? 'Enviando...' : 'Enviar Reporte'}
               </button>
             </div>
           </div>

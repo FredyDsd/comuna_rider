@@ -416,8 +416,8 @@ function hasRegisteredPhone(raw = '') {
   const local = digits.startsWith('549')
     ? digits.slice(3)
     : digits.startsWith('54')
-    ? digits.slice(2)
-    : digits;
+      ? digits.slice(2)
+      : digits;
   return local.length >= 8;
 }
 
@@ -703,7 +703,12 @@ export default function MapaPage() {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        const mapped = data.map((row) => {
+        const mapRows = data.filter(
+          (row) =>
+            row.badge !== '🚩 Reporte Feria' &&
+            !String(row.extra || '').includes('"feria_report"')
+        );
+        const mapped = mapRows.map((row) => {
           const parsed = parseExtraJson(row.extra);
           const createdMs = row.created_at ? new Date(row.created_at).getTime() : Date.now();
           let layer = 'controles';
@@ -841,14 +846,14 @@ export default function MapaPage() {
     activeLayer === 'controles'
       ? controlesItems
       : activeLayer === 'calles'
-      ? callesItems
-      : activeLayer === 'gomerias'
-      ? gomeriasItems
-      : activeLayer === 'clientes' && canUseCadeteTools
-      ? clientesItems
-      : activeLayer === 'sos' && canUseCadeteTools
-      ? sosItems
-      : controlesItems;
+        ? callesItems
+        : activeLayer === 'gomerias'
+          ? gomeriasItems
+          : activeLayer === 'clientes' && canUseCadeteTools
+            ? clientesItems
+            : activeLayer === 'sos' && canUseCadeteTools
+              ? sosItems
+              : controlesItems;
 
   // Clima SMN / Open-Meteo
   useEffect(() => {
@@ -1099,9 +1104,9 @@ export default function MapaPage() {
       reportLayer === 'controles'
         ? reportDesc.trim()
         : reportDesc.trim() ||
-          (reportLayer === 'clientes'
-            ? extraObj.tag
-            : `Reportado por ${authorRoleLabel}: ${authorName}.`);
+        (reportLayer === 'clientes'
+          ? extraObj.tag
+          : `Reportado por ${authorRoleLabel}: ${authorName}.`);
 
     const newDbRow = {
       user_id: user.id,
@@ -1427,8 +1432,8 @@ export default function MapaPage() {
     const candidatePhone = hasRegisteredPhone(sosPhone)
       ? formatArPhone(sosPhone)
       : hasRegisteredPhone(profile?.whatsapp)
-      ? formatArPhone(profile.whatsapp)
-      : '';
+        ? formatArPhone(profile.whatsapp)
+        : '';
     const phoneToShare = candidatePhone;
 
     // Si completó/actualizó su teléfono en este SOS y no lo tenía registrado en Supabase, lo guarda en su perfil
@@ -1436,7 +1441,7 @@ export default function MapaPage() {
       phoneToShare &&
       (!hasRegisteredPhone(profile?.whatsapp) || formatArPhone(profile?.whatsapp) !== phoneToShare)
     ) {
-      updateProfile({ whatsapp: phoneToShare }).catch(() => {});
+      updateProfile({ whatsapp: phoneToShare }).catch(() => { });
     }
 
     const extraObj = {
@@ -1455,12 +1460,11 @@ export default function MapaPage() {
     const locationText = resolvedAddress
       ? `Calle: ${resolvedAddress}`
       : isRealGps
-      ? `GPS real: ${finalLat}, ${finalLng}`
-      : `Zona: ${selectedZone} (${selectedSubzone})`;
+        ? `GPS real: ${finalLat}, ${finalLng}`
+        : `Zona: ${selectedZone} (${selectedSubzone})`;
 
-    const sosDescription = `${sosNote.trim() || selectedSosOption.label}. ${locationText} • Hora: ${timeStr} hs${
-      phoneToShare ? ` • WhatsApp: ${phoneToShare}` : ''
-    }`;
+    const sosDescription = `${sosNote.trim() || selectedSosOption.label}. ${locationText} • Hora: ${timeStr} hs${phoneToShare ? ` • WhatsApp: ${phoneToShare}` : ''
+      }`;
 
     const newSosRow = {
       user_id: user.id,
@@ -1601,9 +1605,9 @@ export default function MapaPage() {
     { id: 'gomerias', label: 'Gomerías', icon: 'tire_repair', count: gomeriasItems.length },
     ...(canUseCadeteTools
       ? [
-          { id: 'clientes', label: 'Clientes', icon: 'fact_check', count: clientesItems.length },
-          { id: 'sos', label: 'SOS', icon: 'emergency', count: sosItems.length },
-        ]
+        { id: 'clientes', label: 'Clientes', icon: 'fact_check', count: clientesItems.length },
+        { id: 'sos', label: 'SOS', icon: 'emergency', count: sosItems.length },
+      ]
       : []),
   ];
 
@@ -1696,11 +1700,10 @@ export default function MapaPage() {
                         key={zone.id}
                         type="button"
                         onClick={() => handleSelectMacroZone(zone.id)}
-                        className={`h-8 px-2 rounded-xl font-label-sm text-label-sm transition-all flex items-center justify-center gap-1 text-center active:scale-95 ${
-                          isSelected
+                        className={`h-8 px-2 rounded-xl font-label-sm text-label-sm transition-all flex items-center justify-center gap-1 text-center active:scale-95 ${isSelected
                             ? 'bg-surface-container-lowest text-primary shadow-sm font-extrabold'
                             : 'bg-white/15 text-on-primary-container hover:bg-white/25 font-bold'
-                        }`}
+                          }`}
                       >
                         {isSelected && (
                           <span
@@ -1734,11 +1737,10 @@ export default function MapaPage() {
                         key={sub.name}
                         type="button"
                         onClick={() => handleSelectSubzone(sub)}
-                        className={`flex-shrink-0 h-7 px-2.5 rounded-full font-label-sm text-label-sm transition-colors flex items-center gap-1 active:scale-95 ${
-                          isSubActive
+                        className={`flex-shrink-0 h-7 px-2.5 rounded-full font-label-sm text-label-sm transition-colors flex items-center gap-1 active:scale-95 ${isSubActive
                             ? 'bg-tertiary-fixed text-on-tertiary-fixed font-extrabold shadow-xs'
                             : 'bg-black/25 text-on-primary-container hover:bg-black/35 font-bold'
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-xs">pin_drop</span>
                         {sub.name}
@@ -1843,11 +1845,10 @@ export default function MapaPage() {
                 {weather.hourly.map((h, idx) => (
                   <div
                     key={`${h.hour}-${idx}`}
-                    className={`flex-shrink-0 min-w-[76px] rounded-lg p-1.5 flex flex-col items-center gap-0.5 text-center border ${
-                      idx === 0
+                    className={`flex-shrink-0 min-w-[76px] rounded-lg p-1.5 flex flex-col items-center gap-0.5 text-center border ${idx === 0
                         ? 'bg-primary-fixed/35 border-primary/30'
                         : 'bg-surface-container-low border-surface-container'
-                    }`}
+                      }`}
                   >
                     <span className="font-label-sm text-[10px] font-extrabold text-on-surface">
                       {h.hour}
@@ -1894,17 +1895,15 @@ export default function MapaPage() {
           <button
             id="btn-quick-report"
             onClick={handleStartAddAlert}
-            className={`pointer-events-auto h-11 rounded-full px-4 flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all ${
-              isPlacingPin
+            className={`pointer-events-auto h-11 rounded-full px-4 flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all ${isPlacingPin
                 ? 'bg-primary-container text-on-primary-container font-extrabold ring-4 ring-primary/30'
                 : 'bg-inverse-surface/95 text-inverse-on-surface font-bold'
-            }`}
+              }`}
             type="button"
           >
             <span
-              className={`material-symbols-outlined text-lg ${
-                isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
-              }`}
+              className={`material-symbols-outlined text-lg ${isPlacingPin ? 'text-on-primary-container' : 'text-primary-fixed'
+                }`}
             >
               {!canWriteMap ? 'lock' : isPlacingPin ? 'close' : 'add_location_alt'}
             </span>
@@ -1912,8 +1911,8 @@ export default function MapaPage() {
               {!canWriteMap
                 ? 'Ingresar para Reportar'
                 : isPlacingPin
-                ? 'Cancelar Pin'
-                : 'Agregar Alerta'}
+                  ? 'Cancelar Pin'
+                  : 'Agregar Alerta'}
             </span>
           </button>
         </div>
@@ -1922,9 +1921,8 @@ export default function MapaPage() {
       {/* 4. BARRA / CAJÓN INFERIOR DESLIZABLE POR CAPAS SEPARADAS */}
       <section
         style={{ height: `${sheetHeightPx}px` }}
-        className={`absolute left-0 right-0 bottom-0 z-30 bg-surface-container-lowest rounded-t-3xl shadow-[0_-8px_30px_rgba(21,28,39,0.18)] border-t border-surface-container flex flex-col overflow-hidden ${
-          isDraggingSheet ? '' : 'transition-[height] duration-200 ease-out'
-        }`}
+        className={`absolute left-0 right-0 bottom-0 z-30 bg-surface-container-lowest rounded-t-3xl shadow-[0_-8px_30px_rgba(21,28,39,0.18)] border-t border-surface-container flex flex-col overflow-hidden ${isDraggingSheet ? '' : 'transition-[height] duration-200 ease-out'
+          }`}
       >
         {/* Cabecera Arrastrable */}
         <div
@@ -1972,19 +1970,18 @@ export default function MapaPage() {
                   setActiveLayer(btn.id);
                   if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
                 }}
-                className={`px-3 py-1.5 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1.5 transition-all ${
-                  isActive
+                className={`px-3 py-1.5 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1.5 transition-all ${isActive
                     ? btn.id === 'gomerias'
                       ? 'bg-tertiary text-on-tertiary font-extrabold'
                       : btn.id === 'clientes'
-                      ? 'bg-indigo-600 text-white font-extrabold'
-                      : btn.id === 'sos'
-                      ? 'bg-error text-on-error font-extrabold'
-                      : 'bg-primary text-on-primary font-extrabold'
+                        ? 'bg-indigo-600 text-white font-extrabold'
+                        : btn.id === 'sos'
+                          ? 'bg-error text-on-error font-extrabold'
+                          : 'bg-primary text-on-primary font-extrabold'
                     : isSosBtn
-                    ? 'bg-error-container text-on-error-container font-extrabold animate-pulse'
-                    : 'bg-surface-container-low text-on-surface font-bold hover:bg-surface-container'
-                }`}
+                      ? 'bg-error-container text-on-error-container font-extrabold animate-pulse'
+                      : 'bg-surface-container-low text-on-surface font-bold hover:bg-surface-container'
+                  }`}
               >
                 <span className="material-symbols-outlined text-sm">{btn.icon}</span>
                 <span>
@@ -2028,12 +2025,12 @@ export default function MapaPage() {
               item.layer === 'gomerias'
                 ? 'bg-tertiary'
                 : item.layer === 'clientes'
-                ? 'bg-indigo-600'
-                : item.layer === 'calles'
-                ? 'bg-sky-600'
-                : item.layer === 'sos'
-                ? 'bg-error'
-                : 'bg-primary-container';
+                  ? 'bg-indigo-600'
+                  : item.layer === 'calles'
+                    ? 'bg-sky-600'
+                    : item.layer === 'sos'
+                      ? 'bg-error'
+                      : 'bg-primary-container';
 
             return (
               <article
@@ -2045,15 +2042,14 @@ export default function MapaPage() {
                 {/* Cabecera de la tarjeta */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span
-                    className={`px-2 py-0.5 rounded-full font-label-sm text-[10px] uppercase font-extrabold flex items-center gap-1 ${
-                      item.layer === 'gomerias'
+                    className={`px-2 py-0.5 rounded-full font-label-sm text-[10px] uppercase font-extrabold flex items-center gap-1 ${item.layer === 'gomerias'
                         ? 'bg-tertiary-container text-on-tertiary-container'
                         : item.layer === 'clientes'
-                        ? 'bg-indigo-100 text-indigo-800'
-                        : item.layer === 'calles'
-                        ? 'bg-sky-100 text-sky-900'
-                        : 'bg-error-container text-on-error-container'
-                    }`}
+                          ? 'bg-indigo-100 text-indigo-800'
+                          : item.layer === 'calles'
+                            ? 'bg-sky-100 text-sky-900'
+                            : 'bg-error-container text-on-error-container'
+                      }`}
                   >
                     {item.layer === 'clientes' ? item.tag : item.badge}
                   </span>
@@ -2261,11 +2257,10 @@ export default function MapaPage() {
                       <button
                         type="button"
                         onClick={() => handleConfirmStillThere(item)}
-                        className={`px-3 py-1 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-1 active:scale-95 transition-all ${
-                          isConfirmed
+                        className={`px-3 py-1 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-1 active:scale-95 transition-all ${isConfirmed
                             ? 'bg-primary text-on-primary'
                             : 'bg-surface-container-low text-primary hover:bg-primary/10'
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-sm">thumb_up</span>
                         <span>Sigue ahí ({item.confirmCount || 1})</span>
@@ -2274,11 +2269,10 @@ export default function MapaPage() {
                       <button
                         type="button"
                         onClick={() => handleDismissOrDelete(item)}
-                        className={`px-2.5 py-1 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-1 active:scale-95 ${
-                          isDismissed
+                        className={`px-2.5 py-1 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-1 active:scale-95 ${isDismissed
                             ? 'bg-error-container text-on-error-container'
                             : 'bg-surface-container-low text-secondary hover:bg-surface-container'
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-sm">
                           {isOwnerOrAdmin ? 'delete' : 'flag'}
@@ -2337,11 +2331,10 @@ export default function MapaPage() {
               <button
                 type="button"
                 onClick={() => applyPresetByLayer('controles')}
-                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${
-                  reportLayer === 'controles'
+                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${reportLayer === 'controles'
                     ? 'bg-primary-container text-on-primary-container shadow-sm font-bold'
                     : 'bg-surface-container-low text-on-surface'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-xl">local_police</span>
                 <span className="font-label-sm text-label-sm">Control / Grúa (2h30)</span>
@@ -2350,11 +2343,10 @@ export default function MapaPage() {
               <button
                 type="button"
                 onClick={() => applyPresetByLayer('calles_lluvia')}
-                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${
-                  reportLayer === 'calles' && reportSubType === 'lluvia'
+                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${reportLayer === 'calles' && reportSubType === 'lluvia'
                     ? 'bg-sky-600 text-white shadow-sm font-bold'
                     : 'bg-surface-container-low text-on-surface'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-xl">tsunami</span>
                 <span className="font-label-sm text-label-sm">Lluvia / Badén (5h)</span>
@@ -2363,11 +2355,10 @@ export default function MapaPage() {
               <button
                 type="button"
                 onClick={() => applyPresetByLayer('calles_obra')}
-                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${
-                  reportLayer === 'calles' && reportSubType === 'obra'
+                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${reportLayer === 'calles' && reportSubType === 'obra'
                     ? 'bg-sky-700 text-white shadow-sm font-bold'
                     : 'bg-surface-container-low text-on-surface'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-xl">construction</span>
                 <span className="font-label-sm text-label-sm">Calle Rota / Obra (10d)</span>
@@ -2376,11 +2367,10 @@ export default function MapaPage() {
               <button
                 type="button"
                 onClick={() => applyPresetByLayer('gomerias')}
-                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${
-                  reportLayer === 'gomerias'
+                className={`p-2.5 rounded-xl flex flex-col items-center gap-1 text-center ${reportLayer === 'gomerias'
                     ? 'bg-tertiary text-on-tertiary shadow-sm font-bold'
                     : 'bg-surface-container-low text-on-surface'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-xl">tire_repair</span>
                 <span className="font-label-sm text-label-sm">Gomería / Taller</span>
@@ -2390,11 +2380,10 @@ export default function MapaPage() {
                 <button
                   type="button"
                   onClick={() => applyPresetByLayer('clientes')}
-                  className={`col-span-2 p-2.5 rounded-xl flex items-center justify-center gap-2 ${
-                    reportLayer === 'clientes'
+                  className={`col-span-2 p-2.5 rounded-xl flex items-center justify-center gap-2 ${reportLayer === 'clientes'
                       ? 'bg-indigo-600 text-white shadow-sm font-bold'
                       : 'bg-indigo-50 text-indigo-800 font-bold'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-xl">fact_check</span>
                   <span className="font-label-sm text-label-sm">
@@ -2444,8 +2433,8 @@ export default function MapaPage() {
                   reportLayer === 'gomerias'
                     ? 'Nombre de la Gomería o Taller (Ej: Gomería Norte)'
                     : reportLayer === 'clientes'
-                    ? 'Dirección exacta o edificio (Ej: Av. Senador Pérez 420)'
-                    : 'Ubicación exacta (Ej: Rotonda Chango Más)'
+                      ? 'Dirección exacta o edificio (Ej: Av. Senador Pérez 420)'
+                      : 'Ubicación exacta (Ej: Rotonda Chango Más)'
                 }
                 className="w-full h-10 px-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none"
               />
@@ -2457,8 +2446,8 @@ export default function MapaPage() {
                   reportLayer === 'clientes'
                     ? 'Contá tu experiencia: timbre que no anda, teléfono alternativo, dónde esperar...'
                     : reportLayer === 'controles'
-                    ? 'Detalle opcional (podés dejarlo vacío, o aclarar: grúa, alcoholemia, piden papeles...)'
-                    : 'Detalle útil para quienes pasan por esta calle...'
+                      ? 'Detalle opcional (podés dejarlo vacío, o aclarar: grúa, alcoholemia, piden papeles...)'
+                      : 'Detalle útil para quienes pasan por esta calle...'
                 }
                 className="w-full p-3 rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none resize-none"
               />
@@ -2572,11 +2561,10 @@ export default function MapaPage() {
                           key={opt.id}
                           type="button"
                           onClick={() => setSelectedSosOption(opt)}
-                          className={`p-2.5 rounded-xl flex items-center gap-2 text-left border transition-all ${
-                            active
+                          className={`p-2.5 rounded-xl flex items-center gap-2 text-left border transition-all ${active
                               ? 'bg-error text-on-error border-error font-extrabold shadow-sm'
                               : 'bg-error-container/35 text-on-surface border-error/25 font-bold'
-                          }`}
+                            }`}
                         >
                           <span className="material-symbols-outlined text-lg">{opt.icon}</span>
                           <span className="font-label-sm text-label-sm leading-tight">
@@ -2621,11 +2609,10 @@ export default function MapaPage() {
                           key={opt.id}
                           type="button"
                           onClick={() => setSelectedSosOption(opt)}
-                          className={`p-2 rounded-xl flex items-center gap-1.5 text-left border transition-all ${
-                            active
+                          className={`p-2 rounded-xl flex items-center gap-1.5 text-left border transition-all ${active
                               ? 'bg-amber-500 text-white border-amber-600 font-extrabold shadow-sm'
                               : 'bg-surface-container-low text-on-surface border-surface-container font-bold'
-                          }`}
+                            }`}
                         >
                           <span className="material-symbols-outlined text-base">{opt.icon}</span>
                           <span className="font-label-sm text-label-sm leading-tight">
@@ -2640,23 +2627,22 @@ export default function MapaPage() {
                 {/* Ubicación GPS Real, Dirección Detectada, Teléfono y Nota breve */}
                 <div className="space-y-2 pt-1">
                   <div
-                    className={`p-3 rounded-xl border space-y-1.5 ${
-                      gpsStatus === 'ready' || gpsStatus === 'manual'
+                    className={`p-3 rounded-xl border space-y-1.5 ${gpsStatus === 'ready' || gpsStatus === 'manual'
                         ? 'bg-sky-50 border-sky-300'
                         : gpsStatus === 'error'
-                        ? 'bg-amber-50 border-amber-300'
-                        : 'bg-surface-container-low border-surface-container'
-                    }`}
+                          ? 'bg-amber-50 border-amber-300'
+                          : 'bg-surface-container-low border-surface-container'
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-2 text-[11px]">
                       <span className="font-extrabold text-on-surface">
                         {gpsStatus === 'locating'
                           ? '📡 Obteniendo ubicación GPS real...'
                           : gpsStatus === 'ready' && sosCoords
-                          ? `🔵 GPS Real (±${sosCoords.accuracy || 15}m): ${sosCoords.lat}, ${sosCoords.lng}`
-                          : gpsStatus === 'manual' && sosCoords
-                          ? `📍 Punto fijado en mapa: ${sosCoords.lat}, ${sosCoords.lng}`
-                          : '⚠️ Sin señal GPS automática'}
+                            ? `🔵 GPS Real (±${sosCoords.accuracy || 15}m): ${sosCoords.lat}, ${sosCoords.lng}`
+                            : gpsStatus === 'manual' && sosCoords
+                              ? `📍 Punto fijado en mapa: ${sosCoords.lat}, ${sosCoords.lng}`
+                              : '⚠️ Sin señal GPS automática'}
                       </span>
                       <button
                         type="button"
@@ -2752,6 +2738,7 @@ export default function MapaPage() {
                   disabled={sendingSos}
                   onClick={handleEmitSos}
                   className="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg font-black shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
+
                 >
                   <span className="material-symbols-outlined">emergency_share</span>
                   {sendingSos ? 'Enviando SOS...' : 'ENVIAR ALERTA SOS AHORA'}

@@ -21,4 +21,9 @@
 - **Regla 7 (Zoom Admin y Lógica Completa de Rechazo de Foto):**
   - El Administrador puede tocar cualquier miniatura de foto de perfil (en Feria o en el Panel de Moderación de Perfil) para ampliarla en un modal Lightbox y aprobar o rechazar desde ahí.
   - Al rechazar una foto: se restaura `avatar_url` a `DEFAULT_AVATAR_URL` (eliminando la imagen rechazada), se establece `verification_status = 'rejected'`, **se conserva el rol operativo** (`cadete_verificado` no se degrada a `ciudadano`, y si era `cadete_emprendedor` vuelve a `cadete_verificado`), desaparece de las listas pendientes del admin y el usuario ve en `/perfil` el estado `❌ Foto rechazada por el Admin` para subir una nueva foto (lo que vuelve `verification_status` a `'pending'`).
-- **Regla 8 (Documentación Siempre Actualizada):** Mantener actualizados siempre los archivos `.md` dentro de la carpeta `proyecto/` ante cada cambio funcional, visual o de negocio.
+- **Regla 8 (Sin Sello "Vendedor Confiable", Pop-up WhatsApp y Reporte Comunitario en Feria):**
+  - Las tarjetas de publicación en **«Mulitas emprendedoras»** no muestran etiquetas de `"Vendedor Confiable"` ni `"Verificado"`.
+  - Al presionar **"Charlar"** en Feria, se muestra primero un pop-up aclarando que **Comuna Rider** es una herramienta gratuita y comunitaria que no cobra comisiones ni asume responsabilidad por las ventas; recién al presionar **"Continuar"** se abre WhatsApp.
+  - Cada tarjeta incluye un botón de bandera (`flag`) para que cualquier compañero autenticado reporte una publicación con motivo de texto; el Administrador visualiza los reportes en **«Mulitas emprendedoras»** para **Borrar Publicación** o **Descartar Reporte**.
+- **Regla 9 (Foto de Perfil Aprobada Obligatoria en Turnos):** Para publicar horarios en `/turnos` también es requisito contar con foto de perfil propia aprobada por el Administrador; si falta, se muestra el aviso de espacio seguro con acceso directo a `/perfil`.
+- **Regla 10 (Documentación Siempre Actualizada):** Mantener actualizados siempre los archivos `.md` dentro de la carpeta `proyecto/` ante cada cambio funcional, visual o de negocio.

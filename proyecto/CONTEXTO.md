@@ -49,9 +49,9 @@ comuna_rider/
 
 ## Módulos Implementados
 1. **Mapa de Alertas (`/`)** — Mapa Leaflet a pantalla completa con panel inferior deslizable de 3 estados, pines comunitarios en tiempo real (controles policiales, zonas rojas, badenes, lluvia, gomerías y SOS) y expiración automática a las 12 horas.
-2. **Tablón de Turnos (`/turnos`)** — Intercambio/cesión de turnos entre cadetes en tira única desplazable horizontalmente; oculta días pasados, habilita la semana siguiente los miércoles, permite publicar solo desde **Mis horarios** y toma el WhatsApp del perfil (`profiles.whatsapp`).
+2. **Tablón de Turnos (`/turnos`)** — Intercambio/cesión de turnos entre cadetes en tira única desplazable horizontalmente; oculta días pasados, habilita la semana siguiente los miércoles, requiere foto de perfil aprobada para publicar, permite publicar solo desde **Mis horarios** y toma el WhatsApp del perfil (`profiles.whatsapp`).
 3. **Calculadora de Finanzas (`/calculadora`)** — Rendición de caja interactiva, cálculo de nafta YPF, plus por clima (+25%), gastos extra, saldo neto, historial y reporte rápido por WhatsApp.
-4. **Feria «Mulitas emprendedoras» (`/directorio`, pestaña `"Feria"`)** — Marketplace exclusivo para la comunidad rider. Requiere foto de perfil propia (`360x360`) aprobada por el Administrador (o subida directa si el usuario es `admin`).
+4. **Feria «Mulitas emprendedoras» (`/directorio`, pestaña `"Feria"`)** — Marketplace exclusivo para la comunidad rider sin etiquetas de "Vendedor Confiable", con aviso previo de no responsabilidad antes de abrir WhatsApp, reportes comunitarios con bandera (`flag`) para revisión del Administrador y requisito de foto de perfil propia (`360x360`) aprobada para publicar (auto-aprobada si es `admin`).
 5. **Mi Perfil y Panel de Moderación (`/perfil`)** — Registro/login con Email o Google, edición de datos/WhatsApp, carga de foto de perfil con envío automático a revisión y panel administrativo con ampliación de fotos (Lightbox), aprobación N2/N3 y rechazo.
 6. **Botón SOS Global** — Botón circular rojo arrastrable por pantalla con persistencia de posición y oculto en `/perfil`.
 

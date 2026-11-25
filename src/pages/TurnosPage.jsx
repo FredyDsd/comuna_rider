@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, DEFAULT_AVATAR_URL } from '../context/AuthContext';
 
 // Únicas zonas reales de logueo en PedidosYa Jujuy
 const PEYA_LOGIN_ZONES = ['Centro', 'Los Perales'];
@@ -222,7 +222,8 @@ function buildInitialSeeds(calendarDays, todayIso) {
 
 export default function TurnosPage() {
   const navigate = useNavigate();
-  const { user, profile, canUseCadeteTools, updateProfile } = useAuth();
+  const { user, profile, canUseCadeteTools, hasCustomPhoto, hasApprovedPhoto, updateProfile } =
+    useAuth();
 
   const {
     days: calendarDays,
@@ -245,8 +246,9 @@ export default function TurnosPage() {
   const stripDragRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
   const modalStripDragRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
 
-  // Modal de publicación
+  // Modal de publicación y aviso de foto de perfil requerida
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isPhotoSafetyModalOpen, setIsPhotoSafetyModalOpen] = useState(false);
   const [publishDay, setPublishDay] = useState(todayIso);
   const [publishType, setPublishType] = useState('ceder');
   const [publishZone, setPublishZone] = useState('Centro');
@@ -406,14 +408,8 @@ export default function TurnosPage() {
   });
 
   const handleOpenPublishModal = () => {
-    if (!canUseCadeteTools) {
-      if (
-        window.confirm(
-          '🔒 Acción restringida.\nSolo los Cadetes Verificados pueden publicar turnos. ¿Ir a Mi Perfil?'
-        )
-      ) {
-        navigate('/perfil');
-      }
+    if (!user || !canUseCadeteTools || !hasApprovedPhoto) {
+      setIsPhotoSafetyModalOpen(true);
       return;
     }
     setPublishDay(selectedDay);
@@ -448,8 +444,9 @@ export default function TurnosPage() {
   };
 
   const handlePublishShift = async () => {
-    if (!canUseCadeteTools || !user) {
-      navigate('/perfil');
+    if (!canUseCadeteTools || !user || !hasApprovedPhoto) {
+      setIsPublishModalOpen(false);
+      setIsPhotoSafetyModalOpen(true);
       return;
     }
 
@@ -481,6 +478,7 @@ export default function TurnosPage() {
       user_id: user.id,
       cadete_name: cadeteName,
       cadete_score: `Score ${profile?.score ?? 98}% • Cadete Verificado`,
+      avatar_url: profile?.avatar_url || DEFAULT_AVATAR_URL,
       day_id: publishDay,
       type: isSuelto ? 'suelto' : 'permuto',
       type_badge: isSuelto ? 'Suelto / Cedo libre' : 'Permuto / Cambio',
@@ -512,8 +510,7 @@ export default function TurnosPage() {
           whatsapp: formattedPhone,
           cadete: cadeteName,
           score: newRow.cadete_score,
-          avatar:
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+          avatar: profile?.avatar_url || DEFAULT_AVATAR_URL,
         };
         setDbShifts((prev) => [localShift, ...prev]);
       }
@@ -1042,6 +1039,66 @@ export default function TurnosPage() {
               >
                 <span className="material-symbols-outlined text-xl">send</span>
                 {savingShift ? 'Guardando en Supabase...' : 'Publicar Turno'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SEGURIDAD: Foto de perfil aprobada requerida para publicar turnos */}
+      {isPhotoSafetyModalOpen && (
+        <div
+          onClick={() => setIsPhotoSafetyModalOpen(false)}
+          className="fixed inset-0 z-[115] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest w-full max-w-sm rounded-2xl p-space-md shadow-2xl space-y-3"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-11 h-11 rounded-full bg-primary-fixed text-primary flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-2xl">verified_user</span>
+              </div>
+              <div>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold leading-tight">
+                  Espacio seguro para compañeros
+                </h3>
+                <p className="font-body-sm text-[11px] text-secondary">
+                  Publicación de turnos en Comuna Rider
+                </p>
+              </div>
+            </div>
+
+            <p className="font-body-sm text-body-sm text-on-surface bg-surface-container-low p-3 rounded-xl border border-surface-container-high leading-relaxed">
+              {!user
+                ? 'Queremos que Comuna Rider sea un espacio seguro para vos y nuestros compañeros. Iniciá sesión y cargá tu foto de perfil para usar esta función.'
+                : hasCustomPhoto && profile?.verification_status === 'pending'
+                ? 'Queremos que Comuna Rider sea un espacio seguro para vos y nuestros compañeros. Tu foto de perfil ya fue enviada y aguarda aprobación del Administrador.'
+                : profile?.verification_status === 'rejected'
+                ? 'Queremos que Comuna Rider sea un espacio seguro para vos y nuestros compañeros. Tu foto anterior fue rechazada; subí una nueva foto de perfil clara para usar esta función.'
+                : 'Queremos que Comuna Rider sea un espacio seguro para vos y nuestros compañeros. Por eso, para publicar turnos necesitás cargar tu foto de perfil y contar con aprobación del Administrador.'}
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsPhotoSafetyModalOpen(false)}
+                className="h-11 rounded-full bg-surface-container text-secondary font-label-md text-label-md font-bold"
+              >
+                Ahora no
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPhotoSafetyModalOpen(false);
+                  navigate('/perfil', { state: { highlightPhotoUpload: true } });
+                }}
+                className="h-11 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-extrabold flex items-center justify-center gap-1 shadow-md active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">photo_camera</span>
+                {hasCustomPhoto && profile?.verification_status === 'pending'
+                  ? 'Ver Mi Perfil'
+                  : 'Cargar Foto'}
               </button>
             </div>
           </div>
