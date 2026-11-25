@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import JujuyMap, { JUJUY_MACRO_ZONES, JUJUY_ZONES_COORDS } from '../components/JujuyMap';
@@ -482,6 +482,7 @@ const SOS_OPTIONS = [
 ];
 
 export default function MapaPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, canWriteMap, canUseCadeteTools, isAdmin, updateProfile } = useAuth();
 
@@ -1360,7 +1361,7 @@ export default function MapaPage() {
       });
   }, [resolveReverseAddress]);
 
-  const handleOpenSosModal = () => {
+  const handleOpenSosModal = useCallback(() => {
     if (!canUseCadeteTools) return;
     const savedWa = profile?.whatsapp || '';
     const hasSaved = hasRegisteredPhone(savedWa);
@@ -1371,7 +1372,14 @@ export default function MapaPage() {
     setIsPickingSosOnMap(false);
     setIsSosModalOpen(true);
     requestRealGpsLocation();
-  };
+  }, [canUseCadeteTools, profile?.whatsapp, requestRealGpsLocation]);
+
+  useEffect(() => {
+    if (location.state?.openSos && canUseCadeteTools) {
+      handleOpenSosModal();
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, canUseCadeteTools, handleOpenSosModal, navigate]);
 
   const handleStartManualSosPin = () => {
     setIsSosModalOpen(false);

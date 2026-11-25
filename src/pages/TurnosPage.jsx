@@ -21,14 +21,19 @@ function buildTwoWeeksCalendar() {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayIso = toIsoDateLocal(today);
 
-  // Lunes de la semana actual (en JS getDay(): 0=Dom, 1=Lun ... 6=Sáb)
+  // Lunes=0, Martes=1, Miércoles=2, Jueves=3, Viernes=4, Sábado=5, Domingo=6
   const dayOfWeek = today.getDay();
-  const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const todayWeekDayIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const currentMonday = new Date(today);
-  currentMonday.setDate(today.getDate() + offsetToMonday);
+  currentMonday.setDate(today.getDate() - todayWeekDayIdx);
+
+  // Los días pasados desaparecen. Si aún es Lunes o Martes, solo queda hasta el Domingo actual.
+  // Recién a partir del Miércoles (todayWeekDayIdx >= 2) se habilitan los 7 días de la semana siguiente.
+  const isNextWeekUnlocked = todayWeekDayIdx >= 2;
+  const maxIndex = isNextWeekUnlocked ? 14 : 7;
 
   const days = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = todayWeekDayIdx; i < maxIndex; i++) {
     const d = new Date(currentMonday);
     d.setDate(currentMonday.getDate() + i);
     const id = toIsoDateLocal(d);
@@ -48,7 +53,33 @@ function buildTwoWeeksCalendar() {
     });
   }
 
-  return { days, todayIso };
+  return { days, todayIso, isNextWeekUnlocked };
+}
+
+function parseMinutesFromTimeStr(hhmm = '') {
+  const match = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isShiftExpired(shift, todayIso) {
+  if (!shift?.day_id) return false;
+  if (shift.day_id < todayIso) return true;
+  if (shift.day_id > todayIso) return false;
+
+  // Mismo día (Hoy): validar si la hora de finalización del turno ya pasó
+  const parts = (shift.time || '').split(/[–-]/);
+  if (parts.length < 2) return false;
+  const startMin = parseMinutesFromTimeStr(parts[0]);
+  const endMin = parseMinutesFromTimeStr(parts[1]);
+  if (startMin === null || endMin === null) return false;
+
+  // Si cruza la medianoche (ej. 20:00 – 00:30), sigue activo hoy
+  if (endMin <= startMin) return false;
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return nowMin > endMin;
 }
 
 function formatArPhone(raw = '') {
@@ -106,9 +137,9 @@ function buildInitialSeeds(calendarDays, todayIso) {
   const todayDay = calendarDays.find((d) => d.id === todayIso) || calendarDays[0];
   const todayIdx = calendarDays.findIndex((d) => d.id === todayDay.id);
   const tomorrowDay = calendarDays[Math.min(todayIdx + 1, calendarDays.length - 1)] || todayDay;
-  const nextWeekMonday = calendarDays[7] || todayDay;
+  const nextWeekMonday = calendarDays.find((d) => d.weekIndex === 1);
 
-  return [
+  const seeds = [
     {
       id: 'seed-shift-1',
       user_id: 'seed-user-1',
@@ -163,7 +194,10 @@ function buildInitialSeeds(calendarDays, todayIso) {
       avatar:
         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
     },
-    {
+  ];
+
+  if (nextWeekMonday) {
+    seeds.push({
       id: 'seed-shift-4',
       user_id: 'seed-user-4',
       day_id: nextWeekMonday.id,
@@ -180,15 +214,21 @@ function buildInitialSeeds(calendarDays, todayIso) {
       score: 'Score 99% • Cadete Verificado',
       avatar:
         'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    },
-  ];
+    });
+  }
+
+  return seeds;
 }
 
 export default function TurnosPage() {
   const navigate = useNavigate();
   const { user, profile, canUseCadeteTools, updateProfile } = useAuth();
 
-  const { days: calendarDays, todayIso } = useMemo(() => buildTwoWeeksCalendar(), []);
+  const {
+    days: calendarDays,
+    todayIso,
+    isNextWeekUnlocked,
+  } = useMemo(() => buildTwoWeeksCalendar(), []);
   const seedShifts = useMemo(
     () => buildInitialSeeds(calendarDays, todayIso),
     [calendarDays, todayIso]
@@ -330,8 +370,8 @@ export default function TurnosPage() {
 
   const allShifts = useMemo(() => {
     const activeSeeds = seedShifts.filter((s) => !deletedSeedIds.includes(s.id));
-    return [...dbShifts, ...activeSeeds];
-  }, [dbShifts, seedShifts, deletedSeedIds]);
+    return [...dbShifts, ...activeSeeds].filter((s) => !isShiftExpired(s, todayIso));
+  }, [dbShifts, seedShifts, deletedSeedIds, todayIso]);
 
   const myShifts = useMemo(() => {
     if (!user) return [];
@@ -580,7 +620,11 @@ export default function TurnosPage() {
         {viewMode === 'general' && (
           <div className="space-y-1 pt-0.5">
             <div className="flex items-center justify-between px-0.5 text-[10px] text-secondary font-bold">
-              <span>Deslizá horizontalmente ↔ (2 semanas Lun–Dom)</span>
+              <span>
+                {isNextWeekUnlocked
+                  ? 'Deslizá ↔ (Semana actual + siguiente)'
+                  : 'Semana siguiente habilita el Miércoles'}
+              </span>
               <span>{dayLookup[selectedDay]?.fullLabel}</span>
             </div>
             <div
