@@ -4,7 +4,7 @@
 *Agente: Revisa este archivo constantemente antes de generar nuevo código.*
 
 - **Regla 1 (Backend y Auth Exclusivos en Supabase):** Todo el stack backend, base de datos en tiempo real y autenticación debe manejarse única y exclusivamente con Supabase (`profiles`, `alerts`, `shifts`, `directory_items`).
-- **Regla 2 (Mapa Full-Screen y Expiración de Alertas):** El mapa interactivo Leaflet ocupa toda la pantalla con un panel inferior deslizable (bottom sheet) de 3 estados. Las alertas viales expiradas se ocultan/limpian automáticamente tras 12 horas.
+- **Regla 2 (Mapa Full-Screen y Expiración de Alertas):** El mapa interactivo Leaflet ocupa toda la pantalla con un panel inferior deslizable (bottom sheet) de 3 estados. Al elegir una capa (`Controles`, `Calles`, `Gomerías`, etc.) o publicar una alerta, la barra inferior permanece abajo y solo sube si el usuario la arrastra hacia arriba o pulsa `"Subir barra ↑"`. Las alertas viales expiradas se ocultan/limpian automáticamente tras 12 horas.
 - **Regla 3 (Botón SOS Circular y Arrastrable):** El botón de emergencia es circular, muestra únicamente `SOS` centrado, es arrastrable libremente por la pantalla (con sujeción dentro del área segura para no cortarse y persistencia de posición en `localStorage`), y aparece en todas las pantallas **excepto en `/perfil`**.
 - **Regla 4 (Tablón de Turnos Sin Botones de Semana):**
   - Se eliminan los botones de "Semana Actual / Siguiente"; todos los días habilitados se muestran en una tira única desplazable horizontalmente.

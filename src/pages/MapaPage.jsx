@@ -1160,7 +1160,6 @@ export default function MapaPage() {
       }
 
       setActiveLayer(reportLayer);
-      setSheetHeightPx(getHalfSheetHeight());
       setPickedCoords(null);
       setIsReportModalOpen(false);
     } catch (err) {
@@ -1970,7 +1969,6 @@ export default function MapaPage() {
                 type="button"
                 onClick={() => {
                   setActiveLayer(btn.id);
-                  if (isSheetCollapsed) setSheetHeightPx(getHalfSheetHeight());
                 }}
                 className={`px-3 py-1.5 rounded-full font-label-sm text-label-sm shadow-xs flex-shrink-0 flex items-center gap-1.5 transition-all ${isActive
                     ? btn.id === 'gomerias'
