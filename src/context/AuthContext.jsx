@@ -58,7 +58,7 @@ export const ROLES_INFO = {
     name: 'Ciudadano Registrado',
     badge: 'Nivel 1 • Ciudadano',
     description:
-      'Usuario registrado base. Puede ver y aportar alertas al Mapa y ver la Feria. No ve Turnos ni Avisos y Noticias hasta ser verificado como Cadete.',
+      'Usuario registrado base. Puede ver y aportar alertas al Mapa y ver la Feria. No ve Turnos ni Novedades hasta ser verificado como Cadete.',
   },
   cadete_verificado: {
     level: 2,
@@ -66,7 +66,7 @@ export const ROLES_INFO = {
     name: 'Cadete Verificado',
     badge: 'Nivel 2 • Cadete Verificado',
     description:
-      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Avisos y Noticias y Feria.',
+      'Cadete aprobado por los moderadores. Tiene acceso completo a todas las herramientas: Mapa, Turnos, Novedades y Feria.',
   },
   cadete_emprendedor: {
     level: 3,

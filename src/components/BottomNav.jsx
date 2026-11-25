@@ -20,8 +20,8 @@ export default function BottomNav() {
           badge: '3',
         },
         {
-          to: '/noticias',
-          label: 'Noticias',
+          to: '/novedades',
+          label: 'Novedades',
           icon: 'newspaper',
           badge: null,
         },

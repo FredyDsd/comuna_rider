@@ -3,34 +3,22 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 const ADMIN_NOTICE_BADGE = '📢 Aviso Admin';
-const NEWS_CACHE_KEY = 'comuna_rider_news_cache_v1';
+const NEWS_CACHE_KEY = 'comuna_rider_news_cache_v2';
 const NEWS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 min cache local entre cambios de pestaña
+const MAX_NEWS_DISPLAY = 7;
 
-const NEWS_CATEGORIES = [
-  { id: 'all', label: 'Todas', icon: 'newspaper' },
-  { id: 'plataformas', label: 'Plataformas', icon: 'two_wheeler' },
-  { id: 'nafta', label: 'Nafta', icon: 'local_gas_station' },
-  { id: 'jujuy', label: 'Jujuy', icon: 'location_on' },
-];
-
-const CATEGORY_STYLES = {
+const CATEGORY_LABELS = {
   plataformas: {
-    label: 'Plataformas',
-    icon: 'two_wheeler',
-    badgeClass: 'bg-primary-fixed text-on-primary-fixed-variant border-outline-variant/60',
-    iconWrapClass: 'bg-primary-fixed/80 text-primary',
+    label: 'Delivery',
+    dotClass: 'bg-primary',
   },
   nafta: {
     label: 'Nafta',
-    icon: 'local_gas_station',
-    badgeClass: 'bg-amber-100 text-amber-900 border-amber-200',
-    iconWrapClass: 'bg-amber-100 text-amber-700',
+    dotClass: 'bg-amber-500',
   },
   jujuy: {
     label: 'Jujuy',
-    icon: 'location_on',
-    badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-200',
-    iconWrapClass: 'bg-emerald-100 text-emerald-700',
+    dotClass: 'bg-emerald-500',
   },
 };
 
@@ -97,13 +85,6 @@ function formatRelativeTime(isoDate) {
   });
 }
 
-function normalizeSearch(str = '') {
-  return String(str)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
 function parseAlertNotice(row) {
   let parsed = {};
   try {
@@ -166,6 +147,130 @@ function writeCachedNews(items, updatedAt) {
   }
 }
 
+function NewsPortalCard({ item, onShare }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const [faviconFailed, setFaviconFailed] = useState(false);
+  const catMeta = CATEGORY_LABELS[item.category] || CATEGORY_LABELS.plataformas;
+  const showImage = Boolean(item.image) && !imgFailed;
+
+  return (
+    <a
+      href={item.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block overflow-hidden rounded-2xl bg-surface-container-lowest border border-surface-container shadow-[0_2px_10px_rgba(21,28,39,0.06)] hover:border-primary/40 active:scale-[0.99] transition-all"
+    >
+      {/* Portada real del portal (OpenGraph 16:9) */}
+      {showImage && (
+        <div className="relative w-full aspect-[16/9] bg-surface-container-low overflow-hidden">
+          <img
+            src={item.image}
+            alt={item.title}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setImgFailed(true)}
+            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/20 pointer-events-none" />
+
+          {/* Badge de tiempo relativo arriba a la derecha */}
+          <span className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white font-label-sm text-[10px] tracking-wide">
+            {formatRelativeTime(item.publishedAt)}
+          </span>
+
+          {/* Identidad del portal abajo a la izquierda sobre la foto */}
+          <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-md shadow-sm max-w-[75%]">
+              {item.favicon && !faviconFailed ? (
+                <img
+                  src={item.favicon}
+                  alt=""
+                  onError={() => setFaviconFailed(true)}
+                  className="w-3.5 h-3.5 rounded-sm object-contain flex-shrink-0"
+                />
+              ) : (
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${catMeta.dotClass}`} />
+              )}
+              <span className="font-label-sm text-[11px] text-on-surface truncate">
+                {item.source}
+              </span>
+            </div>
+
+            <span className="px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-white/95 font-label-sm text-[10px] uppercase tracking-wider flex-shrink-0">
+              {catMeta.label}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Cuerpo editorial estilo previsualización de enlace */}
+      <div className="p-4">
+        {!showImage && (
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="inline-flex items-center gap-1.5 min-w-0">
+              {item.favicon && !faviconFailed ? (
+                <img
+                  src={item.favicon}
+                  alt=""
+                  onError={() => setFaviconFailed(true)}
+                  className="w-4 h-4 rounded-sm object-contain flex-shrink-0"
+                />
+              ) : (
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${catMeta.dotClass}`} />
+              )}
+              <span className="font-label-sm text-xs text-on-surface truncate">
+                {item.source}
+              </span>
+              <span className="text-secondary/50 text-xs">•</span>
+              <span className="font-label-sm text-[10px] uppercase text-secondary">
+                {catMeta.label}
+              </span>
+            </div>
+            <span className="font-body-sm text-[11px] text-secondary flex-shrink-0">
+              {formatRelativeTime(item.publishedAt)}
+            </span>
+          </div>
+        )}
+
+        <h3 className="font-headline-md text-[16px] leading-[1.3] font-extrabold text-on-surface group-hover:text-primary transition-colors">
+          {item.title}
+        </h3>
+
+        {item.description && (
+          <p className="mt-1.5 font-body-sm text-[13px] leading-relaxed text-secondary line-clamp-2">
+            {item.description}
+          </p>
+        )}
+
+        <div className="mt-3 pt-2.5 border-t border-surface-container/70 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0 text-secondary">
+            <span className="material-symbols-outlined text-sm flex-shrink-0">language</span>
+            <span className="font-body-sm text-xs truncate">
+              {item.domain || item.source}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={(e) => onShare(e, item)}
+              title="Compartir por WhatsApp"
+              className="h-8 px-2.5 rounded-lg bg-surface-container-low hover:bg-emerald-50 text-secondary hover:text-emerald-700 flex items-center gap-1 font-label-sm text-[11px] transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">share</span>
+              <span>Pasar</span>
+            </button>
+            <span className="inline-flex items-center gap-0.5 text-primary font-label-md text-xs">
+              Leer
+              <span className="material-symbols-outlined text-sm">open_in_new</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </a>
+  );
+}
+
 export default function NoticiasPage() {
   const { user, profile, isAdmin } = useAuth();
 
@@ -180,14 +285,14 @@ export default function NoticiasPage() {
   const [savingNotice, setSavingNotice] = useState(false);
   const [deletingNoticeId, setDeletingNoticeId] = useState(null);
 
-  // Noticias automáticas
-  const [newsItems, setNewsItems] = useState(() => readCachedNews()?.items || []);
+  // Novedades automáticas (máximo 7)
+  const [newsItems, setNewsItems] = useState(() =>
+    (readCachedNews()?.items || []).slice(0, MAX_NEWS_DISPLAY)
+  );
   const [newsUpdatedAt, setNewsUpdatedAt] = useState(() => readCachedNews()?.updatedAt || null);
   const [loadingNews, setLoadingNews] = useState(() => !readCachedNews());
   const [refreshingNews, setRefreshingNews] = useState(false);
   const [newsError, setNewsError] = useState(null);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
 
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -198,7 +303,6 @@ export default function NoticiasPage() {
     }, 3600);
   }, []);
 
-  // Cargar avisos oficiales del Admin (tabla announcements con fallback automático a alerts)
   const fetchAnnouncements = useCallback(async () => {
     if (!isSupabaseConfigured) return;
 
@@ -233,7 +337,6 @@ export default function NoticiasPage() {
     }
   }, []);
 
-  // Cargar noticias automáticas desde /api/noticias
   const fetchNews = useCallback(
     async ({ force = false } = {}) => {
       if (force) {
@@ -250,18 +353,18 @@ export default function NoticiasPage() {
           throw new Error(`Error del servidor (${res.status})`);
         }
         const data = await res.json();
-        const items = Array.isArray(data?.items) ? data.items : [];
+        const items = (Array.isArray(data?.items) ? data.items : []).slice(0, MAX_NEWS_DISPLAY);
         const updatedAt = data?.updatedAt || new Date().toISOString();
         setNewsItems(items);
         setNewsUpdatedAt(updatedAt);
         writeCachedNews(items, updatedAt);
         if (force) {
-          showToast('Noticias actualizadas.');
+          showToast('Novedades actualizadas.');
         }
       } catch (err) {
-        console.warn('Error cargando noticias automáticas:', err);
+        console.warn('Error cargando novedades automáticas:', err);
         setNewsError(
-          'No pudimos actualizar las noticias ahora. Verificá tu conexión o intentá de nuevo.'
+          'No pudimos actualizar las novedades ahora. Verificá tu conexión o intentá de nuevo.'
         );
       } finally {
         setLoadingNews(false);
@@ -282,12 +385,11 @@ export default function NoticiasPage() {
     }
   }, [fetchNews]);
 
-  // Suscripción en tiempo real a avisos
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel(`noticias-avisos-${noticeStorage}`)
+      .channel(`novedades-avisos-${noticeStorage}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: noticeStorage },
@@ -302,7 +404,6 @@ export default function NoticiasPage() {
     };
   }, [noticeStorage, fetchAnnouncements]);
 
-  // Solo avisos vigentes (los vencidos se ocultan automáticamente)
   const activeAnnouncements = useMemo(() => {
     const now = Date.now();
     return announcements.filter((a) => {
@@ -311,28 +412,6 @@ export default function NoticiasPage() {
       return Number.isNaN(exp) || exp > now;
     });
   }, [announcements]);
-
-  const categoryCounts = useMemo(() => {
-    const counts = { all: newsItems.length, plataformas: 0, nafta: 0, jujuy: 0 };
-    for (const item of newsItems) {
-      if (counts[item.category] !== undefined) {
-        counts[item.category] += 1;
-      }
-    }
-    return counts;
-  }, [newsItems]);
-
-  const filteredNews = useMemo(() => {
-    const q = normalizeSearch(searchQuery).trim();
-    return newsItems.filter((item) => {
-      if (activeCategory !== 'all' && item.category !== activeCategory) {
-        return false;
-      }
-      if (!q) return true;
-      const haystack = normalizeSearch(`${item.title} ${item.source} ${item.category}`);
-      return haystack.includes(q);
-    });
-  }, [newsItems, activeCategory, searchQuery]);
 
   const handlePublishNotice = async (e) => {
     e.preventDefault();
@@ -448,8 +527,7 @@ export default function NoticiasPage() {
   const handleShareNewsWhatsApp = (e, item) => {
     e.preventDefault();
     e.stopPropagation();
-    const catLabel = CATEGORY_STYLES[item.category]?.label || 'Noticias';
-    const text = `📰 *${catLabel} — Comuna Rider Jujuy*\n${item.title}\n(${item.source})\n${item.link}`;
+    const text = `📰 *${item.title}*\n${item.source}\n${item.link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -457,7 +535,7 @@ export default function NoticiasPage() {
     <div className="py-space-md flex flex-col gap-space-md pb-6">
       {/* Toast flotante */}
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] w-[92%] max-w-sm bg-on-surface text-surface px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between gap-2 animate-fade-in">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[70] w-[92%] max-w-sm bg-on-surface text-surface px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between gap-2">
           <span className="font-body-sm text-body-sm font-semibold">{toastMessage}</span>
           <button
             type="button"
@@ -469,14 +547,14 @@ export default function NoticiasPage() {
         </div>
       )}
 
-      {/* Encabezado compacto + acción exclusiva Admin */}
+      {/* Encabezado limpio + acción exclusiva Admin */}
       <section className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight">
-            {activeAnnouncements.length > 0 ? 'Avisos y Noticias' : 'Noticias Rider'}
+            {activeAnnouncements.length > 0 ? 'Avisos y Novedades' : 'Novedades'}
           </h1>
           <p className="font-body-sm text-body-sm text-secondary mt-0.5">
-            Delivery, combustibles y novedades de Jujuy
+            Delivery, combustibles y Jujuy
             {newsUpdatedAt ? ` • ${formatRelativeTime(newsUpdatedAt)}` : ''}
           </p>
         </div>
@@ -486,7 +564,7 @@ export default function NoticiasPage() {
             type="button"
             onClick={() => fetchNews({ force: true })}
             disabled={refreshingNews}
-            title="Actualizar noticias"
+            title="Actualizar novedades"
             className="h-10 w-10 rounded-xl bg-surface-container-lowest border border-surface-container text-secondary hover:text-primary flex items-center justify-center shadow-sm active:scale-95 transition-transform disabled:opacity-60"
           >
             <span
@@ -512,7 +590,7 @@ export default function NoticiasPage() {
         </div>
       </section>
 
-      {/* SECCIÓN 1: AVISOS DEL ADMIN — solo se renderiza si hay al menos un aviso activo */}
+      {/* AVISOS DEL ADMIN — solo se renderiza si hay al menos un aviso activo */}
       {activeAnnouncements.length > 0 && (
         <section aria-label="Avisos Oficiales" className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
@@ -536,17 +614,13 @@ export default function NoticiasPage() {
                   key={notice.id}
                   className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${pStyle.cardClass}`}
                 >
-                  <div
-                    className={`absolute left-0 top-0 bottom-0 w-1.5 ${pStyle.accentBar}`}
-                  />
+                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${pStyle.accentBar}`} />
                   <div className="pl-2 flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-label-sm uppercase tracking-wide ${pStyle.badgeClass}`}
                       >
-                        <span className="material-symbols-outlined text-xs">
-                          {pStyle.icon}
-                        </span>
+                        <span className="material-symbols-outlined text-xs">{pStyle.icon}</span>
                         {pStyle.label}
                       </span>
 
@@ -601,82 +675,22 @@ export default function NoticiasPage() {
         </section>
       )}
 
-      {/* SECCIÓN 2: FILTROS + BUSCADOR DE NOTICIAS */}
-      <section className="flex flex-col gap-2.5">
-        {/* Chips de tema */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          {NEWS_CATEGORIES.map((cat) => {
-            const isActive = activeCategory === cat.id;
-            const count = categoryCounts[cat.id] ?? 0;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setActiveCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3.5 h-9 rounded-full border font-label-md text-label-md whitespace-nowrap transition-all flex-shrink-0 active:scale-95 ${
-                  isActive
-                    ? 'bg-primary-container text-on-primary-container border-primary-container shadow-sm'
-                    : 'bg-surface-container-lowest text-secondary border-surface-container hover:border-primary/40'
-                }`}
-              >
-                <span className="material-symbols-outlined text-base">{cat.icon}</span>
-                <span>{cat.label}</span>
-                {!loadingNews && (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-surface-container text-secondary'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Buscador rápido */}
-        <div className="relative">
-          <span className="material-symbols-outlined text-secondary text-xl absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            search
-          </span>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar PedidosYa, nafta, cortes en Jujuy..."
-            className="w-full h-11 pl-10 pr-9 rounded-xl bg-surface-container-lowest border border-surface-container text-body-md text-on-surface placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-surface-container text-secondary flex items-center justify-center"
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* SECCIÓN 3: FEED DE NOTICIAS AUTOMÁTICAS */}
-      <section aria-label="Noticias del rubro" className="flex flex-col gap-3">
+      {/* FEED DE NOVEDADES (HASTA 7 TARJETAS CON PREVISUALIZACIÓN REAL DE PORTALES) */}
+      <section aria-label="Novedades" className="flex flex-col gap-3.5">
         {loadingNews ? (
-          <div className="flex flex-col gap-3">
-            {[1, 2, 3, 4].map((skeleton) => (
+          <div className="flex flex-col gap-3.5">
+            {[1, 2, 3].map((skeleton) => (
               <div
                 key={skeleton}
-                className="rounded-2xl bg-surface-container-lowest border border-surface-container p-4 animate-pulse"
+                className="overflow-hidden rounded-2xl bg-surface-container-lowest border border-surface-container animate-pulse"
               >
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="h-5 w-24 rounded-full bg-surface-container" />
-                  <div className="h-4 w-16 rounded-full bg-surface-container" />
+                <div className="w-full aspect-[16/9] bg-surface-container" />
+                <div className="p-4">
+                  <div className="h-4 w-full rounded bg-surface-container mb-2" />
+                  <div className="h-4 w-4/5 rounded bg-surface-container mb-3" />
+                  <div className="h-3 w-full rounded bg-surface-container mb-1.5" />
+                  <div className="h-3 w-2/3 rounded bg-surface-container" />
                 </div>
-                <div className="h-4 w-full rounded bg-surface-container mb-2" />
-                <div className="h-4 w-4/5 rounded bg-surface-container mb-3" />
-                <div className="h-3.5 w-32 rounded bg-surface-container" />
               </div>
             ))}
           </div>
@@ -687,7 +701,7 @@ export default function NoticiasPage() {
             </div>
             <div>
               <h3 className="font-label-lg text-label-lg text-on-surface">
-                Sin conexión con las noticias
+                Sin conexión con las novedades
               </h3>
               <p className="font-body-sm text-body-sm text-secondary mt-1">{newsError}</p>
             </div>
@@ -700,36 +714,12 @@ export default function NoticiasPage() {
               Reintentar
             </button>
           </div>
-        ) : filteredNews.length === 0 ? (
-          <div className="rounded-2xl bg-surface-container-lowest border border-surface-container p-6 text-center flex flex-col items-center gap-2">
-            <span className="material-symbols-outlined text-3xl text-secondary/60">
-              article
-            </span>
-            <p className="font-label-lg text-label-lg text-on-surface">
-              No hay noticias para este filtro
-            </p>
-            <p className="font-body-sm text-body-sm text-secondary">
-              Probá cambiando de categoría o limpiando la búsqueda.
-            </p>
-            {(activeCategory !== 'all' || searchQuery) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveCategory('all');
-                  setSearchQuery('');
-                }}
-                className="mt-1 h-9 px-4 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md"
-              >
-                Ver todas las noticias
-              </button>
-            )}
-          </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3.5">
             {newsError && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 flex items-center justify-between gap-2 text-amber-900">
                 <span className="font-body-sm text-xs">
-                  Mostrando noticias guardadas. Tocá actualizar para reintentar.
+                  Mostrando novedades guardadas. Tocá actualizar para reintentar.
                 </span>
                 <button
                   type="button"
@@ -741,67 +731,13 @@ export default function NoticiasPage() {
               </div>
             )}
 
-            {filteredNews.map((item) => {
-              const cat = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.plataformas;
-              return (
-                <a
-                  key={item.id}
-                  href={item.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block rounded-2xl bg-surface-container-lowest border border-surface-container p-4 shadow-sm hover:border-primary/40 active:scale-[0.99] transition-all"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border font-label-sm text-label-sm uppercase tracking-wide ${cat.badgeClass}`}
-                    >
-                      <span className="material-symbols-outlined text-xs">{cat.icon}</span>
-                      {cat.label}
-                    </span>
-                    <span className="font-body-sm text-[11px] text-secondary flex-shrink-0">
-                      {formatRelativeTime(item.publishedAt)}
-                    </span>
-                  </div>
-
-                  <h3 className="font-label-lg text-[15px] leading-snug text-on-surface group-hover:text-primary transition-colors">
-                    {item.title}
-                  </h3>
-
-                  <div className="mt-3 pt-2.5 border-t border-surface-container/70 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${cat.iconWrapClass}`}
-                      >
-                        <span className="material-symbols-outlined text-sm">newspaper</span>
-                      </span>
-                      <span className="font-body-sm text-body-sm font-semibold text-secondary truncate">
-                        {item.source}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => handleShareNewsWhatsApp(e, item)}
-                        title="Compartir por WhatsApp"
-                        className="h-8 px-2.5 rounded-lg bg-surface-container-low hover:bg-emerald-50 text-secondary hover:text-emerald-700 flex items-center gap-1 font-label-sm text-[11px] transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-sm">share</span>
-                        <span>Pasar</span>
-                      </button>
-                      <span className="inline-flex items-center gap-0.5 text-primary font-label-md text-xs">
-                        Leer
-                        <span className="material-symbols-outlined text-sm">open_in_new</span>
-                      </span>
-                    </div>
-                  </div>
-                </a>
-              );
-            })}
-
-            <p className="text-center font-body-sm text-[11px] text-secondary/80 pt-1">
-              Noticias recopiladas automáticamente desde medios argentinos y de Jujuy vía Google News.
-            </p>
+            {newsItems.map((item) => (
+              <NewsPortalCard
+                key={item.id}
+                item={item}
+                onShare={handleShareNewsWhatsApp}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -826,7 +762,7 @@ export default function NoticiasPage() {
                     Publicar Aviso Oficial
                   </h2>
                   <p className="font-body-sm text-xs text-secondary">
-                    Visible arriba de las noticias para todos los cadetes
+                    Visible arriba de las novedades para todos los cadetes
                   </p>
                 </div>
               </div>
@@ -840,7 +776,6 @@ export default function NoticiasPage() {
             </div>
 
             <form onSubmit={handlePublishNotice} className="flex flex-col gap-3.5">
-              {/* Prioridad */}
               <div>
                 <label className="block font-label-md text-label-md text-on-surface mb-1.5">
                   Tipo de aviso
@@ -875,7 +810,6 @@ export default function NoticiasPage() {
                 </div>
               </div>
 
-              {/* Título */}
               <div>
                 <label className="block font-label-md text-label-md text-on-surface mb-1">
                   Título del aviso
@@ -891,7 +825,6 @@ export default function NoticiasPage() {
                 />
               </div>
 
-              {/* Mensaje */}
               <div>
                 <label className="block font-label-md text-label-md text-on-surface mb-1">
                   Mensaje
@@ -907,7 +840,6 @@ export default function NoticiasPage() {
                 />
               </div>
 
-              {/* Vigencia */}
               <div>
                 <label className="block font-label-md text-label-md text-on-surface mb-1.5">
                   Duración automática

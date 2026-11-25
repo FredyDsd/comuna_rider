@@ -162,8 +162,9 @@ export default function Layout() {
         return 'Mapa Jujuy';
       case '/turnos':
         return 'Turnos';
+      case '/novedades':
       case '/noticias':
-        return 'Avisos y Noticias';
+        return 'Novedades';
       case '/directorio':
         return 'Mulitas Emprendedoras';
       case '/perfil':

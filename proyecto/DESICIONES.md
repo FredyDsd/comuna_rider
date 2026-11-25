@@ -27,8 +27,8 @@
   - Cada tarjeta incluye un botón de bandera (`flag`) para que cualquier compañero autenticado reporte una publicación con motivo de texto; el Administrador visualiza los reportes en **«Mulitas emprendedoras»** para **Borrar Publicación** o **Descartar Reporte**.
 - **Regla 9 (Foto de Perfil Aprobada Obligatoria en Turnos):** Para publicar horarios en `/turnos` también es requisito contar con foto de perfil propia aprobada por el Administrador; si falta, se muestra el aviso de espacio seguro con acceso directo a `/perfil`.
 - **Regla 10 (Documentación Siempre Actualizada):** Mantener actualizados siempre los archivos `.md` dentro de la carpeta `proyecto/` ante cada cambio funcional, visual o de negocio.
-- **Regla 11 (Reemplazo de Calculadora por Avisos y Noticias — Nivel 2+):**
-  - Se elimina la página y funcionalidad de Calculadora (`/calculadora` redirige a `/noticias`).
-  - La pestaña en `BottomNav.jsx` pasa a ser **"Noticias"** (`/noticias`), restringida a Cadetes desde Nivel 2 (`cadete_verificado`, `cadete_emprendedor`, `admin`).
+- **Regla 11 (Reemplazo de Calculadora por Novedades — Nivel 2+):**
+  - Se elimina la página y funcionalidad de Calculadora (`/calculadora` y `/noticias` redirigen a `/novedades`).
+  - La pestaña en `BottomNav.jsx` se llama **"Novedades"** (`/novedades`), restringida a Cadetes desde Nivel 2 (`cadete_verificado`, `cadete_emprendedor`, `admin`).
   - **Avisos Oficiales:** Solo el Administrador (`admin`) puede publicar y borrar avisos (persistidos en `public.announcements` con fallback automático a `public.alerts` filtrados fuera del mapa). Si no hay avisos vigentes, la sección de avisos se oculta por completo y se muestran directamente las noticias.
-  - **Noticias Automáticas:** Se obtienen automáticamente mediante la Vercel Serverless Function `/api/noticias` (`api/noticias.js`) consultando Google News RSS Argentina (plataformas de delivery, nafta/combustibles y tránsito/clima en Jujuy) con caché en CDN y filtros por tema.
+  - **Noticias Automáticas Curadas (sin buscador ni filtros, máx. 7):** Se obtienen mediante la Vercel Serverless Function `/api/noticias` (`api/noticias.js`) desde Google News RSS Argentina (delivery de plataformas, nafta en surtidor sin spam bursátil, y tránsito/clima de Jujuy), decodificando el enlace real del medio y extrayendo previsualización OpenGraph (`og:image`, `og:description`, favicon y dominio) para mostrar tarjetas estilo portal de noticias.

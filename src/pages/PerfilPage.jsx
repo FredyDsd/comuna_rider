@@ -567,7 +567,7 @@ export default function PerfilPage() {
                 <span>
                   Ingresás como <strong className="text-on-surface">Nivel 1 (Ciudadano)</strong> con
                   acceso a reportar en el Mapa y ver la Feria. Si sos cadete, luego podrás
-                  validar tu WhatsApp para habilitar Turnos y Avisos y Noticias.
+                  validar tu WhatsApp para habilitar Turnos y Novedades.
                 </span>
               </div>
             )}
@@ -620,7 +620,7 @@ export default function PerfilPage() {
                       ¿Sos Cadete en Jujuy?
                     </h2>
                     <p className="font-body-sm text-body-sm text-secondary">
-                      Desbloqueá Turnos y Avisos y Noticias (Nivel 2)
+                      Desbloqueá Turnos y Novedades (Nivel 2)
                     </p>
                   </div>
                 </div>

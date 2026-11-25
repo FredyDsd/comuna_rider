@@ -62,7 +62,7 @@
 
 ---
 
-### ✅ Fase 7 - Reemplazo de Calculadora por Avisos y Noticias (COMPLETADA)
-- **Eliminación de Calculadora:** Se removió `CalculadoraPage.jsx`, se reemplazó la pestaña inferior por **Noticias** (`/noticias`, Nivel 2+) y se agregó redirección desde `/calculadora` hacia `/noticias`.
-- **Noticias Automáticas (`api/noticias.js`):** Función serverless en Vercel (y middleware local en `vite.config.js`) que consulta Google News RSS Argentina para delivery de plataformas, nafta/combustibles y tránsito/clima en Jujuy, con deduplicación, clasificación automática y caché CDN de 30 minutos.
-- **Avisos Oficiales del Admin (`src/pages/NoticiasPage.jsx` + `supabase/schema.sql`):** Sección superior exclusiva para comunicados creados/eliminados por el Administrador (con prioridad y vencimiento automático). Si no hay avisos vigentes, esa sección desaparece por completo mostrando únicamente las noticias.
+### ✅ Fase 7 - Reemplazo de Calculadora por Novedades (COMPLETADA)
+- **Eliminación de Calculadora:** Se removió `CalculadoraPage.jsx`, se reemplazó la pestaña inferior por **Novedades** (`/novedades`, Nivel 2+) y se agregaron redirecciones desde `/calculadora` y `/noticias` hacia `/novedades`.
+- **Novedades Curadas con Preview Real (`api/noticias.js`):** Función serverless en Vercel (y middleware local en `vite.config.js`) que obtiene hasta 7 noticias balanceadas (delivery de plataformas, nafta en surtidor sin spam bursátil y Jujuy), decodifica la URL directa del portal y extrae `og:image`, `og:description` y favicon con caché CDN de 30 minutos.
+- **UI Limpia + Avisos Oficiales del Admin (`src/pages/NoticiasPage.jsx` + `supabase/schema.sql`):** Sin buscador ni filtros; los avisos creados por el Administrador aparecen arriba destacados y se ocultan por completo si no hay avisos vigentes, dejando tarjetas editoriales con foto real y bajada de cada portal.

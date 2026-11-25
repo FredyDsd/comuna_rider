@@ -27,13 +27,13 @@
 - **Requisito de Foto en Turnos:**
   - Un usuario sin foto aprobada que pulsa **Publicar** en **"Mis horarios"** ve el aviso de espacio seguro comunitario y puede ir directo a `/perfil` a subir su foto.
 
-## Pruebas de Avisos y Noticias (Fase 7)
+## Pruebas de Novedades (Fase 7)
 - **Acceso y Navegación:**
-  - La pestaña **"Noticias"** aparece solo para Nivel 2+ (`cadete_verificado`, `cadete_emprendedor`, `admin`). Los usuarios Nivel 1 que ingresen manualmente a `/noticias` o `/calculadora` son redirigidos a `/perfil`.
-  - Navegar a `/calculadora` siendo Nivel 2+ redirige automáticamente a `/noticias`.
+  - La pestaña **"Novedades"** aparece solo para Nivel 2+ (`cadete_verificado`, `cadete_emprendedor`, `admin`). Los usuarios Nivel 1 que ingresen manualmente a `/novedades`, `/noticias` o `/calculadora` son redirigidos a `/perfil`.
+  - Navegar a `/calculadora` o `/noticias` siendo Nivel 2+ redirige automáticamente a `/novedades`.
 - **Avisos del Administrador:**
-  - Si no existen avisos activos, no se muestra ningún bloque ni título de avisos (solo se ven las noticias).
+  - Si no existen avisos activos, no se muestra ningún bloque ni título de avisos (solo se ven las novedades).
   - Solo el Administrador ve el botón **"+ Aviso"** para publicar comunicados y el ícono de papelera para borrarlos.
-  - Al publicar un aviso oficial, aparece destacado arriba del feed de noticias para todos los cadetes sin contaminar los pines del mapa.
-- **Noticias Automáticas (`/api/noticias`):**
-  - Carga automáticamente titulares recientes de Google News Argentina clasificados en `Plataformas`, `Nafta` y `Jujuy`, permite filtrar por categoría/texto, abrir la nota original y compartir por WhatsApp.
+  - Al publicar un aviso oficial, aparece destacado arriba del feed para todos los cadetes sin contaminar los pines del mapa.
+- **Novedades Automáticas con Preview Real (`/api/noticias`):**
+  - Vista limpia sin buscador ni chips de filtro, mostrando un máximo de 7 tarjetas curadas con portada real (`og:image`), bajada (`og:description`), favicon/dominio del portal, enlace directo al medio y botón para compartir por WhatsApp.

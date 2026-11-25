@@ -34,14 +34,15 @@ export default function App() {
               }
             />
             <Route
-              path="noticias"
+              path="novedades"
               element={
                 <CadeteOnlyRoute>
                   <NoticiasPage />
                 </CadeteOnlyRoute>
               }
             />
-            <Route path="calculadora" element={<Navigate to="/noticias" replace />} />
+            <Route path="noticias" element={<Navigate to="/novedades" replace />} />
+            <Route path="calculadora" element={<Navigate to="/novedades" replace />} />
             <Route path="directorio" element={<DirectorioPage />} />
             <Route path="perfil" element={<PerfilPage />} />
             {/* Fallback */}
