@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth, ROLES_INFO } from '../context/AuthContext';
+import {
+  useAuth,
+  ROLES_INFO,
+  DEFAULT_AVATAR_URL,
+  hasCustomProfilePhoto,
+  compressAvatarFile,
+} from '../context/AuthContext';
 import {
   supabase,
   isSupabaseConfigured,
@@ -25,16 +31,21 @@ export default function PerfilPage() {
     roleInfo,
     loading,
     isBanned,
+    hasCustomPhoto,
     canUseCadeteTools,
+    canPublishFeria,
     isAdmin,
     signUpWithEmail,
     signInWithEmail,
     signInWithGoogle,
     updateProfile,
     requestCadeteVerification,
+    requestFeriaVerification,
     refreshProfile,
     signOut,
   } = useAuth();
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   const [email, setEmail] = useState('');
@@ -237,6 +248,48 @@ export default function PerfilPage() {
       setFeedback('🗑️ Alerta eliminada del mapa por moderación.');
     } catch (err) {
       setErrorMsg(`No se pudo borrar la alerta: ${err.message}`);
+    }
+  };
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErrorMsg(null);
+    setFeedback(null);
+    setUploadingAvatar(true);
+    try {
+      const compressedDataUrl = await compressAvatarFile(file);
+      await updateProfile({ avatar_url: compressedDataUrl });
+      setFeedback('📸 Foto de perfil propia guardada en Supabase.');
+    } catch (err) {
+      setErrorMsg(err.message || 'No se pudo cargar tu foto de perfil.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRequestFeriaPermission = async () => {
+    setErrorMsg(null);
+    setFeedback(null);
+    if (!hasCustomPhoto) {
+      setErrorMsg(
+        'Primero cargá tu foto de perfil real para poder solicitar permiso en Mulitas Emprendedoras.'
+      );
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await requestFeriaVerification({
+        avatarUrl: profile?.avatar_url,
+        whatsapp: whatsapp.trim() || profile?.whatsapp,
+      });
+      setFeedback(
+        '🛍️ Solicitud enviada al Panel de Moderación. Un administrador revisará tu foto y aprobará tu permiso (Nivel 3).'
+      );
+    } catch (err) {
+      setErrorMsg(err.message || 'No se pudo enviar la solicitud de Mulitas Emprendedoras.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -716,33 +769,52 @@ export default function PerfilPage() {
                   ) : (
                     pendingRequests.map((reqUser) => {
                       const cleanWa = (reqUser.whatsapp || '').replace(/\D/g, '');
+                      const reqHasCustomPhoto = hasCustomProfilePhoto(reqUser);
                       return (
                         <div
                           key={reqUser.id}
                           className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high space-y-2.5"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <h4 className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
-                                  {reqUser.full_name || 'Sin nombre'}
-                                </h4>
-                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 font-label-sm text-[10px] font-extrabold">
-                                  {reqUser.vehicle || 'Moto'} • {reqUser.zone || 'Jujuy'}
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <img
+                                src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
+                                alt={reqUser.full_name || 'Solicitante'}
+                                className="w-14 h-14 rounded-xl object-cover border border-surface-container-high flex-shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
+                                    {reqUser.full_name || 'Sin nombre'}
+                                  </h4>
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 font-label-sm text-[10px] font-extrabold">
+                                    {reqUser.vehicle || 'Moto'} • {reqUser.zone || 'Jujuy'}
+                                  </span>
+                                </div>
+                                <p className="font-body-sm text-body-sm text-secondary truncate">
+                                  {reqUser.email}
+                                </p>
+                                <p className="font-label-md text-label-md text-primary font-extrabold mt-0.5">
+                                  📱 WhatsApp: {reqUser.whatsapp || 'No especificado'}
+                                </p>
+                                <span
+                                  className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
+                                    reqHasCustomPhoto
+                                      ? 'bg-tertiary-container/20 text-tertiary'
+                                      : 'bg-amber-300/60 text-amber-950'
+                                  }`}
+                                >
+                                  {reqHasCustomPhoto
+                                    ? '📸 Foto de perfil cargada'
+                                    : '⚠️ Tiene foto por defecto'}
                                 </span>
                               </div>
-                              <p className="font-body-sm text-body-sm text-secondary truncate">
-                                {reqUser.email}
-                              </p>
-                              <p className="font-label-md text-label-md text-primary font-extrabold mt-0.5">
-                                📱 WhatsApp: {reqUser.whatsapp || 'No especificado'}
-                              </p>
                             </div>
 
                             {cleanWa && (
                               <a
                                 href={`https://wa.me/${cleanWa}?text=${encodeURIComponent(
-                                  `Hola ${reqUser.full_name || ''}, soy moderador de Comuna Rider Jujuy. Recibimos tu solicitud de verificación como Cadete.`
+                                  `Hola ${reqUser.full_name || ''}, soy moderador de Comuna Rider Jujuy. Recibimos tu solicitud.`
                                 )}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -783,13 +855,13 @@ export default function PerfilPage() {
                                     verification_status: 'approved',
                                     is_banned: false,
                                   },
-                                  `🛍️ ${reqUser.full_name || reqUser.email} aprobado como Nivel 3 (Emprendedor).`
+                                  `🛍️ ${reqUser.full_name || reqUser.email} aprobado como Nivel 3 (Mulitas Emprendedoras).`
                                 )
                               }
                               className="h-9 px-2 rounded-lg bg-primary-fixed text-primary font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
                             >
                               <span className="material-symbols-outlined text-sm">storefront</span>
-                              Aprobar N3
+                              Aprobar N3 (Feria)
                             </button>
                             <button
                               type="button"
@@ -959,6 +1031,71 @@ export default function PerfilPage() {
                 </span>
               )}
             </div>
+
+            {/* Foto de Perfil Propia (Requisito obligatorio para Mulitas Emprendedoras) */}
+            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high flex items-center gap-3">
+              <img
+                src={profile?.avatar_url || DEFAULT_AVATAR_URL}
+                alt="Mi Foto de Perfil"
+                className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0 space-y-1">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
+                    hasCustomPhoto
+                      ? 'bg-tertiary-container/20 text-tertiary'
+                      : 'bg-amber-300/70 text-amber-950'
+                  }`}
+                >
+                  {hasCustomPhoto ? '📸 Foto propia cargada' : '🖼️ Foto por defecto'}
+                </span>
+                <p className="font-body-sm text-[11px] text-secondary leading-snug">
+                  Necesaria para publicar en <strong>Mulitas Emprendedoras</strong>.
+                </p>
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm font-extrabold cursor-pointer active:scale-95">
+                  <span className="material-symbols-outlined text-sm">photo_camera</span>
+                  <span>{uploadingAvatar ? 'Subiendo...' : 'Cambiar Foto de Perfil'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingAvatar}
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {!canPublishFeria && (
+              <div className="p-3 rounded-xl bg-primary-fixed/30 border border-primary/25 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-label-sm text-label-sm font-extrabold text-on-surface">
+                    🛍️ Permiso Feria «Mulitas emprendedoras»
+                  </span>
+                  <span className="font-label-sm text-[10px] font-extrabold text-primary">
+                    {profile?.verification_status === 'pending' ? '⏳ En revisión' : 'Nivel 3'}
+                  </span>
+                </div>
+                <p className="font-body-sm text-[11px] text-secondary">
+                  Requiere cargar tu foto de perfil propia y la aprobación de un administrador.
+                </p>
+                {profile?.verification_status !== 'pending' && (
+                  <button
+                    type="button"
+                    disabled={!hasCustomPhoto || submitting}
+                    onClick={handleRequestFeriaPermission}
+                    className={`w-full h-10 rounded-full font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1.5 ${
+                      hasCustomPhoto
+                        ? 'bg-primary-container text-on-primary-container shadow-sm active:scale-95'
+                        : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">storefront</span>
+                    Solicitar Aprobación para Feria (Nivel 3)
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Toggle Disponible / En Pausa (Solo Cadetes Nivel 2+) */}
             {canUseCadeteTools && (

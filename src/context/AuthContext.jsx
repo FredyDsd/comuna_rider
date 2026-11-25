@@ -3,6 +3,46 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
+export const DEFAULT_AVATAR_URL =
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+
+export function hasCustomProfilePhoto(profile) {
+  const url = (profile?.avatar_url || '').trim();
+  if (!url) return false;
+  if (url === DEFAULT_AVATAR_URL) return false;
+  if (url.includes('photo-1534528741775-53994a69daeb')) return false;
+  return true;
+}
+
+// Redimensiona y comprime una imagen a 180x180 JPEG (~10-15 KB) para guardarla en profiles.avatar_url
+export function compressAvatarFile(file, size = 180, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No se seleccionó ningún archivo de imagen.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen seleccionada.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('El archivo no es una imagen válida.'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export const ROLES_INFO = {
   visitante: {
     level: 1,
@@ -62,11 +102,17 @@ export function AuthProvider({ children }) {
         .maybeSingle();
 
       if (existing && !fetchError) {
+        const patch = {};
         if (!existing.whatsapp && (extraMeta.whatsapp || authUser.user_metadata?.whatsapp)) {
-          const syncedWhatsapp = extraMeta.whatsapp || authUser.user_metadata?.whatsapp;
+          patch.whatsapp = extraMeta.whatsapp || authUser.user_metadata?.whatsapp;
+        }
+        if (!existing.avatar_url) {
+          patch.avatar_url = DEFAULT_AVATAR_URL;
+        }
+        if (Object.keys(patch).length > 0) {
           const { data: updatedExisting } = await supabase
             .from('profiles')
-            .update({ whatsapp: syncedWhatsapp, updated_at: new Date().toISOString() })
+            .update({ ...patch, updated_at: new Date().toISOString() })
             .eq('id', authUser.id)
             .select()
             .single();
@@ -90,6 +136,7 @@ export function AuthProvider({ children }) {
         role: 'ciudadano',
         verification_status: 'none',
         whatsapp: extraMeta.whatsapp || authUser.user_metadata?.whatsapp || '',
+        avatar_url: DEFAULT_AVATAR_URL,
         vehicle: extraMeta.vehicle || authUser.user_metadata?.vehicle || 'Moto',
         zone: extraMeta.zone || authUser.user_metadata?.zone || 'Centro',
         status: 'online',
@@ -254,6 +301,7 @@ export function AuthProvider({ children }) {
           email: user.email,
           full_name: profile?.full_name || user.email?.split('@')[0] || 'Vecino Jujuy',
           role: profile?.role || 'ciudadano',
+          avatar_url: profile?.avatar_url || DEFAULT_AVATAR_URL,
           vehicle: profile?.vehicle || 'Moto',
           zone: profile?.zone || 'Centro',
           status: profile?.status || 'online',
@@ -283,6 +331,18 @@ export function AuthProvider({ children }) {
     });
   };
 
+  // Solicitud para publicar en "Mulitas Emprendedoras" (requiere foto propia + aprobación del Admin)
+  const requestFeriaVerification = async ({ avatarUrl, whatsapp } = {}) => {
+    if (!user) throw new Error('Iniciá sesión primero para solicitar permiso de publicación.');
+    const updates = {
+      verification_status: 'pending',
+      verification_requested_at: new Date().toISOString(),
+    };
+    if (avatarUrl) updates.avatar_url = avatarUrl;
+    if (whatsapp && whatsapp.trim()) updates.whatsapp = whatsapp.trim();
+    return updateProfile(updates);
+  };
+
   const signOut = async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
@@ -294,6 +354,7 @@ export function AuthProvider({ children }) {
   const role = user ? profile?.role || 'ciudadano' : 'visitante';
   const roleInfo = ROLES_INFO[role] || ROLES_INFO.ciudadano;
   const isBanned = Boolean(profile?.is_banned);
+  const hasCustomPhoto = hasCustomProfilePhoto(profile);
 
   // Permisos según las nuevas directivas de USUARIOS.md:
   // 1. Mapa: cualquier usuario registrado no baneado (Nivel 1 Ciudadano, Nivel 2, 3 o 4) puede aportar alertas
@@ -311,9 +372,14 @@ export function AuthProvider({ children }) {
   // Compatibilidad con TurnosPage / Layout
   const canWriteMapAndShifts = canUseCadeteTools;
 
-  // 3. Publicar ventas en el Mercado Cadete: solo Nivel 3 (Emprendedor) y Nivel 4 (Moderador)
+  // 3. Publicar ventas en Mulitas Emprendedoras: exige foto de perfil propia cargada + aprobación del Admin (Nivel 3) o ser Admin
   const canPublishFeria = Boolean(
-    user && !isBanned && ['cadete_emprendedor', 'admin'].includes(role)
+    user &&
+      !isBanned &&
+      (role === 'admin' ||
+        (role === 'cadete_emprendedor' &&
+          hasCustomPhoto &&
+          profile?.verification_status === 'approved'))
   );
 
   // 4. Moderador (Nivel 4): aprueba solicitudes, borra alertas y banea
@@ -328,6 +394,7 @@ export function AuthProvider({ children }) {
         roleInfo,
         loading,
         isBanned,
+        hasCustomPhoto,
         isSupabaseConfigured,
         canWriteMap,
         canUseCadeteTools,
@@ -339,6 +406,7 @@ export function AuthProvider({ children }) {
         signInWithGoogle,
         updateProfile,
         requestCadeteVerification,
+        requestFeriaVerification,
         refreshProfile,
         signOut,
       }}

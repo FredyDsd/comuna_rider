@@ -165,7 +165,7 @@ export default function Layout() {
       case '/calculadora':
         return 'Calculadora';
       case '/directorio':
-        return 'Directorio';
+        return 'Mulitas Emprendedoras';
       case '/perfil':
         return 'Mi Perfil';
       default:
