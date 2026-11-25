@@ -91,7 +91,8 @@ export default function Layout() {
   }, [clampPos]);
 
   const isMapRoute = location.pathname === '/' || location.pathname === '/mapa';
-  const isProfileRoute = location.pathname.startsWith('/perfil');
+  const hideSosButton =
+    location.pathname.startsWith('/perfil') || location.pathname.startsWith('/moderador');
 
   const checkLatestUnseenSos = useCallback(async () => {
     if (!canUseCadeteTools || !isSupabaseConfigured) return;
@@ -280,6 +281,8 @@ export default function Layout() {
         return 'Mulitas Emprendedoras';
       case '/perfil':
         return 'Mi Perfil';
+      case '/moderador':
+        return 'Moderador';
       default:
         return 'Cadetes Jujuy';
     }
@@ -306,8 +309,8 @@ export default function Layout() {
           <Outlet />
         </main>
 
-        {/* Botón circular SOS arrastrable libremente (Todas las páginas salvo Perfil, Nivel 2+) */}
-        {canUseCadeteTools && !isProfileRoute && (
+        {/* Botón circular SOS arrastrable libremente (Todas las páginas salvo Perfil y Moderador, Nivel 2+) */}
+        {canUseCadeteTools && !hideSosButton && (
           <button
             id="btn-global-sos"
             type="button"

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Header({ title = 'Cadetes Jujuy' }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile, roleInfo, canUseCadeteTools } = useAuth();
+  const { user, profile, roleInfo, canUseCadeteTools, isAdmin, isSuperAdmin } = useAuth();
 
   const initials = profile?.full_name
     ? profile.full_name
@@ -73,11 +73,15 @@ export default function Header({ title = 'Cadetes Jujuy' }) {
                 ></span>
                 {isPendingVerification
                   ? '⏳ Verificación Pendiente'
+                  : isSuperAdmin
+                  ? 'Super Admin'
+                  : isAdmin
+                  ? 'Admin'
                   : canUseCadeteTools
                   ? isOnline
-                    ? `Nivel ${roleInfo.level} • ${roleInfo.name}`
+                    ? `${roleInfo.name} • En Ruta`
                     : 'En Pausa'
-                  : 'Nivel 1 • Ciudadano'}
+                  : 'Ciudadano'}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 font-label-sm text-label-sm text-on-primary-container/80">

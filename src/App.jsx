@@ -17,6 +17,15 @@ function CadeteOnlyRoute({ children }) {
   return children;
 }
 
+function AdminOnlyRoute({ children }) {
+  const { isAdmin, loading } = useAuth();
+  if (loading) return null;
+  if (!isAdmin) {
+    return <Navigate to="/perfil" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -51,7 +60,15 @@ export default function App() {
                 </CadeteOnlyRoute>
               }
             />
-            <Route path="perfil" element={<PerfilPage />} />
+            <Route path="perfil" element={<PerfilPage mode="perfil" />} />
+            <Route
+              path="moderador"
+              element={
+                <AdminOnlyRoute>
+                  <PerfilPage mode="moderador" />
+                </AdminOnlyRoute>
+              }
+            />
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

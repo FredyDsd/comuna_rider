@@ -34,7 +34,7 @@ export default function BottomNav() {
         ...(isAdmin
           ? [
               {
-                to: '/perfil',
+                to: '/moderador',
                 label: 'Moderador',
                 icon: 'admin_panel_settings',
                 badge: null,

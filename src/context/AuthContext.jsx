@@ -43,46 +43,54 @@ export function compressAvatarFile(file, size = 360, quality = 0.84) {
   });
 }
 
+const ENV_SUPER_ADMINS = (import.meta.env.VITE_SUPER_ADMIN_EMAIL || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export const SUPER_ADMIN_EMAILS = [...new Set(['madara@gmail.com', ...ENV_SUPER_ADMINS])];
+
+export function isProfileSuperAdmin(profileObj, authUserObj = null) {
+  const email = (profileObj?.email || authUserObj?.email || '').trim().toLowerCase();
+  if (email && SUPER_ADMIN_EMAILS.includes(email)) return true;
+  return Boolean(profileObj?.role === 'admin' && Number(profileObj?.score) === 100);
+}
+
 export const ROLES_INFO = {
   visitante: {
     level: 1,
     code: 'visitante',
-    name: 'Ciudadano (Sin sesión)',
+    name: 'Ciudadano',
     badge: 'Nivel 1 • Ciudadano',
-    description:
-      'Puede consultar el Mapa de Alertas de Jujuy. Iniciá sesión para reportar alertas en el mapa.',
+    description: 'Acceso al Mapa de Alertas.',
   },
   ciudadano: {
     level: 1,
     code: 'ciudadano',
-    name: 'Ciudadano Registrado',
+    name: 'Ciudadano',
     badge: 'Nivel 1 • Ciudadano',
-    description:
-      'Usuario registrado base. Puede ver y aportar alertas al Mapa. Turnos, Novedades y Feria se habilitan al ser verificado como Cadete (Nivel 2).',
+    description: 'Acceso al Mapa de Alertas.',
   },
   cadete_verificado: {
     level: 2,
     code: 'cadete_verificado',
-    name: 'Cadete Verificado',
-    badge: 'Nivel 2 • Cadete Verificado',
-    description:
-      'Cadete aprobado por los moderadores. Tiene acceso completo a Mapa, Turnos, Novedades y Feria.',
+    name: 'Cadete',
+    badge: 'Nivel 2 • Cadete',
+    description: 'Acceso completo para repartidores.',
   },
   cadete_emprendedor: {
     level: 3,
     code: 'cadete_emprendedor',
     name: 'Emprendedor',
     badge: 'Nivel 3 • Emprendedor',
-    description:
-      'Cadete verificado con foto de perfil aprobada y permiso activo para publicar en Feria «Mulitas emprendedoras».',
+    description: 'Habilitado en Feria.',
   },
   admin: {
     level: 4,
     code: 'admin',
     name: 'Moderador',
-    badge: 'Nivel 4 • Moderador',
-    description:
-      'Administrador de los grupos de WhatsApp. Puede aprobar solicitudes de Nivel 2/3, borrar alertas falsas y banear usuarios.',
+    badge: 'Administrador',
+    description: 'Control y moderación.',
   },
 };
 
@@ -103,11 +111,24 @@ export function AuthProvider({ children }) {
 
       if (existing && !fetchError) {
         const patch = {};
+        const shouldBeSuperAdmin = isProfileSuperAdmin(existing, authUser);
         if (!existing.whatsapp && (extraMeta.whatsapp || authUser.user_metadata?.whatsapp)) {
           patch.whatsapp = extraMeta.whatsapp || authUser.user_metadata?.whatsapp;
         }
         if (!existing.avatar_url) {
           patch.avatar_url = DEFAULT_AVATAR_URL;
+        }
+        if (
+          shouldBeSuperAdmin &&
+          (existing.role !== 'admin' ||
+            Number(existing.score) !== 100 ||
+            existing.verification_status !== 'approved' ||
+            existing.is_banned)
+        ) {
+          patch.role = 'admin';
+          patch.score = 100;
+          patch.verification_status = 'approved';
+          patch.is_banned = false;
         }
         if (Object.keys(patch).length > 0) {
           const { data: updatedExisting } = await supabase
@@ -125,6 +146,7 @@ export function AuthProvider({ children }) {
         return existing;
       }
 
+      const isFounder = isProfileSuperAdmin({ email: authUser.email }, authUser);
       const defaultProfile = {
         id: authUser.id,
         email: authUser.email || '',
@@ -133,14 +155,14 @@ export function AuthProvider({ children }) {
           authUser.user_metadata?.full_name ||
           authUser.email?.split('@')[0] ||
           'Vecino Jujuy',
-        role: 'ciudadano',
-        verification_status: 'none',
+        role: isFounder ? 'admin' : 'ciudadano',
+        verification_status: isFounder ? 'approved' : 'none',
         whatsapp: extraMeta.whatsapp || authUser.user_metadata?.whatsapp || '',
         avatar_url: DEFAULT_AVATAR_URL,
         vehicle: extraMeta.vehicle || authUser.user_metadata?.vehicle || 'Moto',
         zone: extraMeta.zone || authUser.user_metadata?.zone || 'Centro',
         status: 'online',
-        score: 98,
+        score: isFounder ? 100 : 98,
         is_banned: false,
       };
 
@@ -391,8 +413,9 @@ export function AuthProvider({ children }) {
       (role === 'admin' || profile?.verification_status === 'approved')
   );
 
-  // 4. Moderador (Nivel 4): aprueba solicitudes, borra alertas y banea
+  // 4. Moderador (Nivel 4): Admin Común vs Super Admin
   const isAdmin = Boolean(user && !isBanned && role === 'admin');
+  const isSuperAdmin = Boolean(isAdmin && isProfileSuperAdmin(profile, user));
 
   return (
     <AuthContext.Provider
@@ -411,6 +434,7 @@ export function AuthProvider({ children }) {
         canWriteMapAndShifts,
         canPublishFeria,
         isAdmin,
+        isSuperAdmin,
         signUpWithEmail,
         signInWithEmail,
         signInWithGoogle,

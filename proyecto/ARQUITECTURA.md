@@ -23,15 +23,16 @@
   - Circular, rojo de alta visibilidad, con la palabra `SOS` centrada.
   - Puede arrastrarse libremente sobre la pantalla mediante pointer/touch events, con límites calculados según el viewport (`safe bounds`) para no quedar cortado por los bordes ni por `BottomNav`.
   - Persiste su última posición en `localStorage`.
-  - Se muestra en todas las rutas **excepto en `/perfil`**.
+  - Se muestra en todas las rutas **excepto en `/perfil` y `/moderador`**.
 
 ## 3. Estructura de Enrutamiento SPA (`react-router-dom`)
 - `/` (`MapaPage.jsx`): Mapa Leaflet full-screen centrado en Jujuy, clima actual, bottom sheet deslizable de 3 alturas y feed de incidentes/controles en vivo con expiración automática a las 12 horas.
 - `/turnos` (`TurnosPage.jsx`): Tablón comunitario de cesión y permuta de turnos en Supabase (`public.shifts`). Tira única de tarjetas de días desplazable horizontalmente (oculta días pasados, habilita la semana siguiente recién los miércoles), publicación exclusiva desde **Mis horarios** y teléfono precargado desde `profiles.whatsapp`.
 - `/novedades` (`NoticiasPage.jsx`, Nivel 2+): Avisos oficiales publicados exclusivamente por el Administrador (se ocultan si no hay avisos vigentes) y hasta 7 noticias curadas con previsualización real de portales (`og:image`, `og:description`, favicon y enlace directo) provistas por `api/noticias.js` sin buscador ni filtros. (`/calculadora` y `/noticias` redirigen automáticamente a `/novedades`).
-- `/directorio` (`DirectorioPage.jsx`, pestaña **"Feria"** en `BottomNav.jsx`): Vista dedicada exclusivamente a la feria rider **«Mulitas emprendedoras»**. Incluye buscador/filtros por rubro, tarjetas de emprendimientos, panel rápido para que el Administrador revise/amplíe fotos pendientes y botón de publicar (redirige a `/perfil` si falta foto aprobada o avisa si está pendiente).
-- `/perfil` (`PerfilPage.jsx`): Acceso por Email/Password o Google OAuth, edición de vehículo/zona/WhatsApp, carga y estado de foto de perfil propia (`360x360` JPEG en `profiles.avatar_url`), y **Panel de Moderación (Nivel 4)** con pestañas (`Solicitudes`, `Usuarios`, `Alertas`) y modal Lightbox para ampliar fotos antes de aprobar o rechazar.
+- `/directorio` (`DirectorioPage.jsx`, pestaña **"Feria"** en `BottomNav.jsx`): Vista dedicada exclusivamente a la feria rider **«Mulitas emprendedoras»** (accesible desde Nivel 2+). Incluye buscador/filtros por rubro, tarjetas de emprendimientos, panel rápido para que el Administrador revise/amplíe fotos pendientes y botón de publicar (redirige a `/perfil` si falta foto aprobada o avisa si está pendiente).
+- `/perfil` (`PerfilPage.jsx` en modo `perfil`): Acceso exclusivo desde la foto de perfil en `Header.jsx`. Login/Registro, solicitud de alta de cadete, carga de foto de perfil propia (`360x360` JPEG) y edición de datos personales.
+- `/moderador` (`PerfilPage.jsx` en modo `moderador`, exclusivo Admin / Super Admin): Acceso desde la pestaña **"Moderador"** en `BottomNav.jsx`. Panel limpio con pestañas (`Solicitudes`, `Usuarios`, `Alertas`) y modal Lightbox para ampliar fotos.
 - Componentes compartidos:
-  - `Header.jsx`: Marca Comuna Rider, zona activa (`SSJ`), estado y acceso directo a `/perfil`.
-  - `BottomNav.jsx`: Barra fija inferior con 4 rutas (`Mapa`, `Turnos`, `Novedades`, `Feria`).
+  - `Header.jsx`: Marca Comuna Rider, zona activa (`SSJ`), estado y acceso directo a `/perfil` tocando la foto de perfil.
+  - `BottomNav.jsx`: Barra fija inferior con rutas (`Mapa`, `Turnos`, `Novedades`, `Feria` y `Moderador` para Admins).
   - `Layout.jsx`: Shell principal + botón SOS circular arrastrable.

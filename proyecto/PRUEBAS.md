@@ -12,7 +12,7 @@
 ## Pruebas de Refinamiento UX, SOS y Verificación de Foto (Fase 6)
 - **Botón SOS Arrastrable:**
   - Se visualiza circular y centrado (`SOS`), sin cortarse en `Mapa`, `Turnos`, `Noticias` ni `Feria`.
-  - Se puede arrastrar por la pantalla, conserva su posición entre vistas/recargas (`localStorage`) y **no aparece en `/perfil`**.
+  - Se puede arrastrar por la pantalla, conserva su posición entre vistas/recargas (`localStorage`) y **no aparece en `/perfil` ni `/moderador`**.
 - **Publicar en Feria («Mulitas emprendedoras»):**
   - Un usuario sin foto aprobada que toca publicar en Feria es redirigido directamente a `/perfil` con la tarjeta de foto resaltada (y en `/perfil` no aparece ningún anuncio de "Permiso Feria").
   - Si un usuario con foto en estado `'pending'` toca publicar, ve el aviso de revisión pendiente.
@@ -40,3 +40,8 @@
 - **Alertas SOS en Novedades y Ventana Superpuesta (Nivel 2+):**
   - Al lanzar una alerta SOS, aparece automáticamente en el bloque `🚨 Alertas SOS en Vivo` de `/novedades` con acciones `"Voy en camino"`, `"Ver Mapa"`, `"WhatsApp"` y `"Cerrar SOS"`.
   - Se superpone una ventana modal global en toda la app únicamente para usuarios Nivel 2+ (`cadete_verificado`, `cadete_emprendedor`, `admin`); solo se cierra cuando el usuario presiona `"Cerrar"` (o navega a Mapa/Novedades) y no vuelve a mostrarse por segunda vez para esa misma alerta.
+- **Super Admin, Admin Común y Separación de Pantallas:**
+  - Presionar la foto de perfil en el header abre `/perfil` únicamente con datos personales y foto (sin simulador de roles ni tabla explicativa de jerarquías).
+  - La pestaña `"Moderador"` abre `/moderador` únicamente con el Panel de Control limpio.
+  - Un **Admin Común** puede aprobar/rechazar solicitudes, banear Nivel 1–3 y borrar alertas, pero **no** ve la opción `Administrador` en el selector ni puede editar/banear a otro Admin o al Super Admin.
+  - Solo el **Super Admin** puede asignar el rol `Administrador` o degradar/banear a un Administrador común.

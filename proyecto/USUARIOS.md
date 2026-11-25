@@ -20,15 +20,13 @@ Para abrir la participación comunitaria en el mapa de alertas a los vecinos de 
 - **Validación:** Usuario con foto de perfil real (`360x360` JPEG guardada en `profiles.avatar_url`) aprobada por un Administrador (`verification_status = 'approved'`).
 - **Permisos:** Todo lo del Nivel 2, más permiso habilitado para publicar productos y emprendimientos en la Feria **«Mulitas emprendedoras»** (`/directorio`). Las tarjetas no muestran sello de "Vendedor Confiable"; cualquier compañero puede reportar avisos mediante el ícono de bandera (`flag`).
 
-### 4. Nivel 4: "Administrador / Moderador" (`admin`)
-- **Permisos:**
-  - Acceso completo a todas las herramientas operativas, **Novedades** y Feria.
-  - **Avisos Oficiales:** Es el único rol habilitado para publicar y eliminar avisos oficiales en `/novedades` (con prioridad `info`, `importante` o `urgente` y vencimiento automático).
-  - **Auto-aprobación de foto:** Si un Administrador sube su propia foto de perfil, queda aprobada automáticamente (`verification_status = 'approved'`) sin requerir aprobación previa.
-  - Acceso al **Panel de Moderación** en `/perfil` y al bloque administrativo rápido en **Feria**:
-    - Tocar cualquier miniatura de solicitante o usuario abre un **modal Lightbox ampliado** para verificar claramente el rostro/identidad en la foto.
-    - Puede **Aprobar N2** (`cadete_verificado`), **Aprobar N3 / Feria** (`cadete_emprendedor`), **Rechazar foto** o **Banear/Desbanear** usuarios (`is_banned`).
-    - Puede eliminar alertas falsas o publicaciones inapropiadas.
+### 4. Nivel 4: "Administrador Común" (`admin`, `score != 100`) y "Super Admin" (`admin`, `score = 100`)
+- **Admin Común (`isAdmin && !isSuperAdmin`):**
+  - Acceso completo al panel de control limpio en `/moderador` (desde la pestaña `"Moderador"` en `BottomNav.jsx`), además de Novedades y Feria.
+  - Puede aprobar/rechazar solicitudes de cadetes (N2) y fotos para Feria (N3), ampliar fotos (Lightbox), borrar alertas/reportes, publicar avisos oficiales y banear usuarios Nivel 1 a 3.
+  - **Restricción de jerarquía:** **No puede** nombrar nuevos administradores ni modificar, degradar o banear a otros Administradores o al Super Admin.
+- **Super Admin (`isSuperAdmin` — cuenta fundadora `madara@gmail.com` / `score = 100`):**
+  - Tiene todas las facultades del Administrador Común, y además es el **único** con permiso para **nombrar nuevos Administradores** o **degradar/banear a Administradores comunes** desde `/moderador`. Su propia cuenta queda protegida frente a modificaciones de terceros.
 
 ## Flujo Completo de Foto de Perfil y Rechazo
 1. **Desde Feria (`/directorio`):** Si un usuario sin permiso vigente intenta publicar:

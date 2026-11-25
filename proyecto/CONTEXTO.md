@@ -35,7 +35,7 @@ comuna_rider/
 │   │   ├── TurnosPage.jsx       # Tablón de turnos con tira móvil y regla del miércoles
 │   │   ├── NoticiasPage.jsx     # Novedades: avisos del Admin + máx. 7 noticias con preview OpenGraph
 │   │   ├── DirectorioPage.jsx   # Feria exclusiva «Mulitas emprendedoras»
-│   │   └── PerfilPage.jsx       # Auth, foto de perfil y Panel de Moderación (N4)
+│   │   └── PerfilPage.jsx       # Mi Perfil (/perfil) y Panel de Control limpio (/moderador)
 │   ├── App.jsx
 │   ├── index.css
 │   └── main.jsx
@@ -56,8 +56,8 @@ comuna_rider/
 2. **Tablón de Turnos (`/turnos`)** — Intercambio/cesión de turnos entre cadetes en tira única desplazable horizontalmente; oculta días pasados, habilita la semana siguiente los miércoles, requiere foto de perfil aprobada para publicar, permite publicar solo desde **Mis horarios** y toma el WhatsApp del perfil (`profiles.whatsapp`).
 3. **Novedades (`/novedades`, Nivel 2+)** — Reemplaza a la antigua Calculadora. Muestra alertas SOS activas en tiempo real (`🚨 Alertas SOS en Vivo`), arriba los avisos oficiales publicados únicamente por el Administrador (si no hay avisos vigentes, esa sección desaparece) y debajo hasta 7 noticias curadas (sin buscador ni filtros) vía `/api/noticias` con portada real (`og:image`), bajada (`og:description`), favicon del medio y enlace directo al portal.
 4. **Feria «Mulitas emprendedoras» (`/directorio`, pestaña `"Feria"`)** — Marketplace exclusivo para la comunidad rider sin etiquetas de "Vendedor Confiable", con aviso previo de no responsabilidad antes de abrir WhatsApp, reportes comunitarios con bandera (`flag`) para revisión del Administrador y requisito de foto de perfil propia (`360x360`) aprobada para publicar (auto-aprobada si es `admin`).
-5. **Mi Perfil y Panel de Moderación (`/perfil`)** — Registro/login con Email o Google, edición de datos/WhatsApp, carga de foto de perfil con envío automático a revisión y panel administrativo con ampliación de fotos (Lightbox), aprobación N2/N3 y rechazo.
-6. **Botón SOS Global y Ventana de Emergencia Única (Nivel 2+)** — Botón circular rojo arrastrable por pantalla (oculto en `/perfil`) y ventana emergente superpuesta por única vez con cierre manual ante cada nueva alerta SOS activa.
+5. **Mi Perfil (`/perfil`) y Panel de Moderador (`/moderador`)** — Al presionar la foto de perfil en `Header.jsx` se accede a `/perfil` (datos personales, carga de foto y solicitud de alta de cadete, sin simulador de roles ni textos extensos). La pestaña `"Moderador"` abre `/moderador` con el panel limpio para **Admin Común** (control operativo) y **Super Admin** (único capaz de nombrar o degradar administradores).
+6. **Botón SOS Global y Ventana de Emergencia Única (Nivel 2+)** — Botón circular rojo arrastrable por pantalla (oculto en `/perfil` y `/moderador`) y ventana emergente superpuesta por única vez con cierre manual ante cada nueva alerta SOS activa.
 
 ## Variables de Entorno
 ```
