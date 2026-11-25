@@ -48,7 +48,7 @@ const ENV_SUPER_ADMINS = (import.meta.env.VITE_SUPER_ADMIN_EMAIL || '')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
-export const SUPER_ADMIN_EMAILS = [...new Set(['madara@gmail.com', ...ENV_SUPER_ADMINS])];
+export const SUPER_ADMIN_EMAILS = [...new Set(['mfdiony@gmail.com', ...ENV_SUPER_ADMINS])];
 
 export function isProfileSuperAdmin(profileObj, authUserObj = null) {
   const email = (profileObj?.email || authUserObj?.email || '').trim().toLowerCase();
