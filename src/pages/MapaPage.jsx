@@ -1381,6 +1381,14 @@ export default function MapaPage() {
     }
   }, [location.state, location.pathname, canUseCadeteTools, handleOpenSosModal, navigate]);
 
+  useEffect(() => {
+    const onGlobalSos = () => {
+      handleOpenSosModal();
+    };
+    window.addEventListener('comuna-open-sos', onGlobalSos);
+    return () => window.removeEventListener('comuna-open-sos', onGlobalSos);
+  }, [handleOpenSosModal]);
+
   const handleStartManualSosPin = () => {
     setIsSosModalOpen(false);
     setIsPickingSosOnMap(true);
@@ -1882,21 +1890,6 @@ export default function MapaPage() {
         </button>
 
         <div className="flex items-center gap-2 pointer-events-none">
-          {/* BOTÓN SOS DIRECTO EN EL MAPA: Exclusivo Deliverys Verificados (Nivel 2+) */}
-          {canUseCadeteTools && (
-            <button
-              id="btn-map-sos"
-              onClick={handleOpenSosModal}
-              type="button"
-              title="Pedir Auxilio SOS"
-              className="pointer-events-auto w-12 h-12 rounded-full bg-error text-on-error flex items-center justify-center shadow-[0_6px_18px_rgba(220,38,38,0.5)] border-2 border-white active:scale-95 transition-transform flex-shrink-0"
-            >
-              <span className="font-label-md text-xs font-black tracking-wider leading-none">
-                SOS
-              </span>
-            </button>
-          )}
-
           {/* Agregar Alerta (Pin Arrastrable) */}
           <button
             id="btn-quick-report"
