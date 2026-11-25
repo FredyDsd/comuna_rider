@@ -98,11 +98,8 @@ export default function DirectorioPage() {
   const {
     user,
     profile,
-    role,
     canPublishFeria,
     isAdmin,
-    updateProfile,
-    requestFeriaVerification,
   } = useAuth();
 
   const [activeCategory, setActiveCategory] = useState('all');
@@ -119,16 +116,11 @@ export default function DirectorioPage() {
   const [customProductImage, setCustomProductImage] = useState('');
   const [savingItem, setSavingItem] = useState(false);
 
-  // Modal de Requisitos (Foto de Perfil + Aprobación Admin Nivel 3)
-  const [isRequirementsModalOpen, setIsRequirementsModalOpen] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [requestingApproval, setRequestingApproval] = useState(false);
-  const [reqError, setReqError] = useState(null);
-
   const [toastMessage, setToastMessage] = useState(null);
   const [marketplaceItems, setMarketplaceItems] = useState(INITIAL_FERIA);
   const [pendingPhotoRequests, setPendingPhotoRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [expandedPhotoUser, setExpandedPhotoUser] = useState(null);
 
   const hasCustomPhoto = hasCustomProfilePhoto(profile);
 
@@ -233,6 +225,8 @@ export default function DirectorioPage() {
   const handleAdminPhotoDecision = async (reqUser, approve) => {
     if (!isAdmin || !isSupabaseConfigured) return;
     try {
+      const preservedRole =
+        reqUser.role === 'cadete_emprendedor' ? 'cadete_verificado' : reqUser.role || 'ciudadano';
       const updates = approve
         ? {
             role: 'cadete_emprendedor',
@@ -241,6 +235,7 @@ export default function DirectorioPage() {
             updated_at: new Date().toISOString(),
           }
         : {
+            role: preservedRole,
             avatar_url: DEFAULT_AVATAR_URL,
             verification_status: 'rejected',
             updated_at: new Date().toISOString(),
@@ -250,14 +245,19 @@ export default function DirectorioPage() {
       if (error) throw error;
 
       setPendingPhotoRequests((prev) => prev.filter((p) => p.id !== reqUser.id));
+      setExpandedPhotoUser((prev) => (prev?.id === reqUser.id ? null : prev));
       showToast(
         approve
           ? `✅ ${reqUser.full_name || reqUser.email} aprobado para publicar en Feria (N3).`
-          : `❌ Foto de ${reqUser.full_name || reqUser.email} rechazada.`
+          : `❌ Foto de ${reqUser.full_name || reqUser.email} rechazada. Se restauró la foto por defecto.`
       );
     } catch (err) {
       alert(`No se pudo procesar la solicitud: ${err.message}`);
     }
+  };
+
+  const redirectToPerfilPhoto = () => {
+    navigate('/perfil', { state: { highlightPhotoUpload: true } });
   };
 
   const handleOpenPublishClick = () => {
@@ -267,14 +267,17 @@ export default function DirectorioPage() {
           '🔒 Para publicar en Mulitas Emprendedoras necesitás iniciar sesión, cargar tu foto de perfil y contar con aprobación del administrador. ¿Ir a Mi Perfil?'
         )
       ) {
-        navigate('/perfil');
+        redirectToPerfilPhoto();
       }
       return;
     }
 
     if (!canPublishFeria) {
-      setReqError(null);
-      setIsRequirementsModalOpen(true);
+      if (profile?.verification_status === 'pending' && hasCustomPhoto) {
+        showToast('⏳ Tu foto de perfil ya fue enviada y está pendiente de aprobación por el Administrador.');
+        return;
+      }
+      redirectToPerfilPhoto();
       return;
     }
 
@@ -283,58 +286,6 @@ export default function DirectorioPage() {
     setCustomProductImage('');
     setItemPhone(profile?.whatsapp || '+54 9 388 ');
     setIsPublishModalOpen(true);
-  };
-
-  const handleAvatarFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setReqError(null);
-    setUploadingAvatar(true);
-    try {
-      const compressedDataUrl = await compressAvatarFile(file);
-      await updateProfile({
-        avatar_url: compressedDataUrl,
-        verification_status: isAdmin ? 'approved' : 'pending',
-        verification_requested_at: new Date().toISOString(),
-      });
-      showToast(
-        isAdmin
-          ? '📸 Foto de perfil propia guardada en Supabase.'
-          : '📸 Foto enviada automáticamente al Administrador para aprobar tu permiso de Feria.'
-      );
-      if (isAdmin) {
-        setIsRequirementsModalOpen(false);
-        setItemTitle('');
-        setItemSubtitle('Excelente estado • Entrega en mano');
-        setCustomProductImage('');
-        setItemPhone(profile?.whatsapp || '+54 9 388 ');
-        setIsPublishModalOpen(true);
-      }
-    } catch (err) {
-      setReqError(err.message || 'No se pudo cargar tu foto de perfil.');
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
-  const handleRequestAdminApproval = async () => {
-    if (!hasCustomPhoto) {
-      setReqError('Primero debés subir tu foto de perfil real (no puede ser la foto por defecto).');
-      return;
-    }
-    setReqError(null);
-    setRequestingApproval(true);
-    try {
-      await requestFeriaVerification({
-        avatarUrl: profile?.avatar_url,
-        whatsapp: profile?.whatsapp,
-      });
-      showToast('Solicitud enviada. Un administrador revisará tu foto y aprobará tu cuenta.');
-    } catch (err) {
-      setReqError(err.message || 'No se pudo enviar la solicitud al administrador.');
-    } finally {
-      setRequestingApproval(false);
-    }
   };
 
   const handleProductImageUpload = async (e) => {
@@ -351,7 +302,7 @@ export default function DirectorioPage() {
   const handlePublishItem = async () => {
     if (!user || !canPublishFeria) {
       setIsPublishModalOpen(false);
-      setIsRequirementsModalOpen(true);
+      redirectToPerfilPhoto();
       return;
     }
     if (!itemTitle.trim()) {
@@ -560,9 +511,13 @@ export default function DirectorioPage() {
         </span>
         {canPublishFeria
           ? 'Publicar en Mulitas Emprendedoras'
-          : user
-          ? 'Publicar (Requiere Foto de Perfil + Aprobación)'
-          : 'Publicar en Mulitas Emprendedoras'}
+          : !user
+          ? 'Publicar en Mulitas Emprendedoras'
+          : profile?.verification_status === 'pending' && hasCustomPhoto
+          ? 'Foto en Revisión del Admin (Pendiente)'
+          : profile?.verification_status === 'rejected'
+          ? 'Foto Rechazada • Subir Nueva en Perfil'
+          : 'Subir Foto de Perfil en Perfil para Publicar'}
       </button>
 
       {/* TARJETA ADMIN: Solicitudes de Foto de Perfil para Publicar en Feria */}
@@ -602,11 +557,21 @@ export default function DirectorioPage() {
                   className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high space-y-2.5"
                 >
                   <div className="flex items-center gap-3">
-                    <img
-                      src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
-                      alt={reqUser.full_name || 'Solicitante'}
-                      className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow-sm flex-shrink-0"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setExpandedPhotoUser(reqUser)}
+                      className="relative group flex-shrink-0 cursor-zoom-in rounded-xl overflow-hidden focus:outline-none"
+                      title="Tocar para ampliar foto"
+                    >
+                      <img
+                        src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
+                        alt={reqUser.full_name || 'Solicitante'}
+                        className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow-sm group-hover:scale-105 transition-transform"
+                      />
+                      <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center shadow">
+                        <span className="material-symbols-outlined text-[13px]">zoom_in</span>
+                      </span>
+                    </button>
                     <div className="min-w-0 flex-1">
                       <p className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
                         {reqUser.full_name || 'Sin nombre'}
@@ -622,7 +587,7 @@ export default function DirectorioPage() {
                         }`}
                       >
                         {reqHasPhoto
-                          ? '📸 Foto de perfil propia'
+                          ? '📸 Foto de perfil propia (tocar para ampliar)'
                           : '⚠️ Tiene foto por defecto'}
                       </span>
                     </div>
@@ -742,150 +707,61 @@ export default function DirectorioPage() {
         </div>
       )}
 
-      {/* MODAL 1: REQUISITOS OBLIGATORIOS PARA PUBLICAR (Foto de Perfil + Aprobación Admin) */}
-      {isRequirementsModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface-container-lowest w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-space-md shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-container text-2xl">
-                  verified_user
-                </span>
-                <div>
-                  <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold">
-                    Requisitos para Publicar
-                  </h3>
-                  <p className="font-body-sm text-[11px] text-secondary">
-                    Mulitas Emprendedoras • Feria Rider
-                  </p>
-                </div>
+      {/* LIGHTBOX ADMIN: Ampliar Foto de Perfil para Verificar */}
+      {expandedPhotoUser && (
+        <div
+          onClick={() => setExpandedPhotoUser(null)}
+          className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest w-full max-w-sm rounded-2xl p-space-md shadow-2xl space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold truncate">
+                  {expandedPhotoUser.full_name || 'Solicitante'}
+                </h3>
+                <p className="font-body-sm text-[11px] text-secondary truncate">
+                  {expandedPhotoUser.email}
+                  {expandedPhotoUser.whatsapp ? ` • ${expandedPhotoUser.whatsapp}` : ''}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsRequirementsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary"
+                onClick={() => setExpandedPhotoUser(null)}
+                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary flex-shrink-0"
               >
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
 
-            {reqError && (
-              <div className="p-2.5 rounded-xl bg-error-container text-on-error-container font-body-sm text-body-sm font-bold">
-                {reqError}
-              </div>
-            )}
-
-            {/* Paso 1: Cargar Foto de Perfil Propia */}
-            <div
-              className={`p-3.5 rounded-xl border space-y-2.5 ${
-                hasCustomPhoto
-                  ? 'bg-tertiary-container/10 border-tertiary/40'
-                  : 'bg-amber-500/10 border-amber-500/40'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-label-md text-label-md font-extrabold text-on-surface">
-                  1. Tu Foto de Perfil Real
-                </span>
-                <span
-                  className={`px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
-                    hasCustomPhoto
-                      ? 'bg-tertiary-container text-on-tertiary-container'
-                      : 'bg-amber-300 text-black'
-                  }`}
-                >
-                  {hasCustomPhoto ? '✅ Cargada' : '⚠️ Obligatoria'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <img
-                  src={profile?.avatar_url || DEFAULT_AVATAR_URL}
-                  alt="Foto de perfil"
-                  className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0"
-                />
-                <div className="flex-1 space-y-1.5">
-                  <p className="font-body-sm text-[12px] text-secondary leading-snug">
-                    {hasCustomPhoto
-                      ? 'Ya cargaste tu foto propia para que los compañeros te reconozcan.'
-                      : isAdmin
-                      ? 'Como Administrador no necesitás aprobación previa: apenas cargues tu foto real ya podés publicar.'
-                      : 'Tu cuenta tiene la foto por defecto. Cargá tu foto real antes de pedir permiso al administrador.'}
-                  </p>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm font-extrabold cursor-pointer active:scale-95">
-                    <span className="material-symbols-outlined text-sm">photo_camera</span>
-                    <span>{uploadingAvatar ? 'Subiendo...' : 'Subir / Cambiar Foto'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploadingAvatar}
-                      onChange={handleAvatarFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
+            <div className="rounded-2xl overflow-hidden bg-surface-container border border-surface-container-high">
+              <img
+                src={expandedPhotoUser.avatar_url || DEFAULT_AVATAR_URL}
+                alt={expandedPhotoUser.full_name || 'Foto de perfil'}
+                className="w-full max-h-[60vh] object-contain mx-auto"
+              />
             </div>
 
-            {/* Paso 2: Aprobación del Administrador (Solo para usuarios no Admin) */}
-            {isAdmin ? (
-              <div className="p-3 rounded-xl bg-tertiary-container/15 border border-tertiary/30 font-body-sm text-body-sm text-tertiary font-bold flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
-                <span>
-                  Rol Administrador: quedás habilitado automáticamente apenas subas tu foto de perfil.
-                </span>
-              </div>
-            ) : (
-              <div
-                className={`p-3.5 rounded-xl border space-y-2.5 ${
-                  role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
-                    ? 'bg-tertiary-container/10 border-tertiary/40'
-                    : 'bg-surface-container-low border-surface-container-high'
-                }`}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleAdminPhotoDecision(expandedPhotoUser, true)}
+                className="h-11 rounded-xl bg-tertiary-container text-on-tertiary-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-label-md text-label-md font-extrabold text-on-surface">
-                    2. Aprobación del Administrador
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-surface-container text-secondary font-label-sm text-[10px] font-extrabold">
-                    {profile?.verification_status === 'pending'
-                      ? '⏳ En revisión'
-                      : role === 'cadete_emprendedor' && profile?.verification_status === 'approved'
-                      ? '✅ Aprobado'
-                      : 'Pendiente'}
-                  </span>
-                </div>
-
-                {profile?.verification_status === 'pending' ? (
-                  <p className="font-body-sm text-body-sm text-secondary">
-                    Tu solicitud ya está en el Panel de Moderación. Un administrador verificará tu foto
-                    de perfil y te habilitará el permiso de vendedor (Nivel 3).
-                  </p>
-                ) : (
-                  <>
-                    <p className="font-body-sm text-body-sm text-secondary">
-                      Un administrador debe revisar tu perfil y aprobar tu permiso para publicar en{' '}
-                      <strong>Mulitas Emprendedoras</strong>.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={!hasCustomPhoto || requestingApproval}
-                      onClick={handleRequestAdminApproval}
-                      className={`w-full h-11 rounded-full font-label-md text-label-md font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                        hasCustomPhoto
-                          ? 'bg-primary-container text-on-primary-container shadow-md active:scale-95'
-                          : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-base">send</span>
-                      {requestingApproval
-                        ? 'Enviando al Admin...'
-                        : 'Solicitar Aprobación al Admin'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+                <span className="material-symbols-outlined text-base">check_circle</span>
+                Aprobar (N3)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAdminPhotoDecision(expandedPhotoUser, false)}
+                className="h-11 rounded-xl bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+                Rechazar Foto
+              </button>
+            </div>
           </div>
         </div>
       )}

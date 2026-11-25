@@ -14,8 +14,8 @@ export function hasCustomProfilePhoto(profile) {
   return true;
 }
 
-// Redimensiona y comprime una imagen a 180x180 JPEG (~10-15 KB) para guardarla en profiles.avatar_url
-export function compressAvatarFile(file, size = 180, quality = 0.82) {
+// Redimensiona y comprime una imagen a 360x360 JPEG para guardarla en profiles.avatar_url con nitidez al ampliar
+export function compressAvatarFile(file, size = 360, quality = 0.84) {
   return new Promise((resolve, reject) => {
     if (!file) {
       reject(new Error('No se seleccionó ningún archivo de imagen.'));

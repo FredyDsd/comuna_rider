@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   useAuth,
   ROLES_INFO,
@@ -24,6 +25,10 @@ const ZONES = [
 ];
 
 export default function PerfilPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const photoCardRef = useRef(null);
+
   const {
     user,
     profile,
@@ -33,19 +38,19 @@ export default function PerfilPage() {
     isBanned,
     hasCustomPhoto,
     canUseCadeteTools,
-    canPublishFeria,
     isAdmin,
     signUpWithEmail,
     signInWithEmail,
     signInWithGoogle,
     updateProfile,
     requestCadeteVerification,
-    requestFeriaVerification,
     refreshProfile,
     signOut,
   } = useAuth();
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [highlightPhotoCard, setHighlightPhotoCard] = useState(false);
+  const [expandedPhotoUser, setExpandedPhotoUser] = useState(null);
 
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   const [email, setEmail] = useState('');
@@ -81,6 +86,21 @@ export default function PerfilPage() {
       setStatus(profile.status || 'online');
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (location.state?.highlightPhotoUpload) {
+      setHighlightPhotoCard(true);
+      const scrollTimer = setTimeout(() => {
+        photoCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 120);
+      const clearTimer = setTimeout(() => setHighlightPhotoCard(false), 7000);
+      navigate(location.pathname, { replace: true, state: {} });
+      return () => {
+        clearTimeout(scrollTimer);
+        clearTimeout(clearTimer);
+      };
+    }
+  }, [location.state, location.pathname, navigate]);
 
   // Cargar datos del Panel de Control si el usuario es Nivel 4 (Moderador)
   const fetchModerationData = useCallback(async () => {
@@ -231,6 +251,7 @@ export default function PerfilPage() {
       setModProfiles((prev) =>
         prev.map((p) => (p.id === targetUserId ? { ...p, ...updates } : p))
       );
+      setExpandedPhotoUser((prev) => (prev?.id === targetUserId ? null : prev));
       if (targetUserId === user?.id) {
         await refreshProfile();
       }
@@ -238,6 +259,22 @@ export default function PerfilPage() {
     } catch (err) {
       setErrorMsg(`Error al moderar usuario: ${err.message}`);
     }
+  };
+
+  const handleRejectUserPhoto = (targetUser) => {
+    const preservedRole =
+      targetUser.role === 'cadete_emprendedor'
+        ? 'cadete_verificado'
+        : targetUser.role || 'ciudadano';
+    return handleModerateUser(
+      targetUser.id,
+      {
+        role: preservedRole,
+        avatar_url: DEFAULT_AVATAR_URL,
+        verification_status: 'rejected',
+      },
+      `❌ Foto de ${targetUser.full_name || targetUser.email} rechazada. Se restauró la foto por defecto para que suba una nueva.`
+    );
   };
 
   const handleModerateDeleteAlert = async (alertId) => {
@@ -264,6 +301,7 @@ export default function PerfilPage() {
         verification_status: isAdmin ? 'approved' : 'pending',
         verification_requested_at: new Date().toISOString(),
       });
+      setHighlightPhotoCard(false);
       setFeedback(
         isAdmin
           ? '📸 Foto de perfil propia guardada en Supabase.'
@@ -273,31 +311,6 @@ export default function PerfilPage() {
       setErrorMsg(err.message || 'No se pudo cargar tu foto de perfil.');
     } finally {
       setUploadingAvatar(false);
-    }
-  };
-
-  const handleRequestFeriaPermission = async () => {
-    setErrorMsg(null);
-    setFeedback(null);
-    if (!hasCustomPhoto) {
-      setErrorMsg(
-        'Primero cargá tu foto de perfil real para poder solicitar permiso en Mulitas Emprendedoras.'
-      );
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await requestFeriaVerification({
-        avatarUrl: profile?.avatar_url,
-        whatsapp: whatsapp.trim() || profile?.whatsapp,
-      });
-      setFeedback(
-        '🛍️ Solicitud enviada al Panel de Moderación. Un administrador revisará tu foto y aprobará tu permiso (Nivel 3).'
-      );
-    } catch (err) {
-      setErrorMsg(err.message || 'No se pudo enviar la solicitud de Mulitas Emprendedoras.');
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -786,11 +799,21 @@ export default function PerfilPage() {
                         >
                           <div className="flex items-start justify-between gap-2.5">
                             <div className="flex items-start gap-2.5 min-w-0">
-                              <img
-                                src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
-                                alt={reqUser.full_name || 'Solicitante'}
-                                className="w-14 h-14 rounded-xl object-cover border border-surface-container-high flex-shrink-0"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => setExpandedPhotoUser(reqUser)}
+                                className="relative group flex-shrink-0 cursor-zoom-in rounded-xl overflow-hidden focus:outline-none"
+                                title="Tocar para ampliar foto"
+                              >
+                                <img
+                                  src={reqUser.avatar_url || DEFAULT_AVATAR_URL}
+                                  alt={reqUser.full_name || 'Solicitante'}
+                                  className="w-14 h-14 rounded-xl object-cover border border-surface-container-high group-hover:scale-105 transition-transform"
+                                />
+                                <span className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center">
+                                  <span className="material-symbols-outlined text-[11px]">zoom_in</span>
+                                </span>
+                              </button>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <h4 className="font-label-lg text-label-lg text-on-surface font-extrabold truncate">
@@ -873,16 +896,7 @@ export default function PerfilPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                handleModerateUser(
-                                  reqUser.id,
-                                  {
-                                    role: 'ciudadano',
-                                    verification_status: 'rejected',
-                                  },
-                                  `Solicitud de ${reqUser.full_name || reqUser.email} rechazada.`
-                                )
-                              }
+                              onClick={() => handleRejectUserPhoto(reqUser)}
                               className="h-9 px-2 rounded-lg bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
                             >
                               <span className="material-symbols-outlined text-sm">close</span>
@@ -918,11 +932,18 @@ export default function PerfilPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <img
-                              src={u.avatar_url || DEFAULT_AVATAR_URL}
-                              alt={u.full_name || 'Usuario'}
-                              className="w-10 h-10 rounded-full object-cover border border-surface-container-high flex-shrink-0"
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setExpandedPhotoUser(u)}
+                              className="relative group flex-shrink-0 cursor-zoom-in rounded-full overflow-hidden focus:outline-none"
+                              title="Tocar para ampliar foto"
+                            >
+                              <img
+                                src={u.avatar_url || DEFAULT_AVATAR_URL}
+                                alt={u.full_name || 'Usuario'}
+                                className="w-10 h-10 rounded-full object-cover border border-surface-container-high group-hover:scale-105 transition-transform"
+                              />
+                            </button>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <p className="font-label-md text-label-md text-on-surface font-extrabold truncate">
@@ -1057,67 +1078,73 @@ export default function PerfilPage() {
             </div>
 
             {/* Foto de Perfil Propia (Requisito obligatorio para Mulitas Emprendedoras) */}
-            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high flex items-center gap-3">
-              <img
-                src={profile?.avatar_url || DEFAULT_AVATAR_URL}
-                alt="Mi Foto de Perfil"
-                className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0 space-y-1">
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${hasCustomPhoto
-                      ? 'bg-tertiary-container/20 text-tertiary'
-                      : 'bg-amber-300/70 text-amber-950'
-                    }`}
-                >
-                  {hasCustomPhoto ? '📸 Foto propia cargada' : '🖼️ Foto por defecto'}
-                </span>
-                <p className="font-body-sm text-[11px] text-secondary leading-snug">
-                  Necesaria para publicar en <strong>Mulitas Emprendedoras</strong>.
+            <div
+              ref={photoCardRef}
+              className={`p-3 rounded-xl border transition-all space-y-2 ${
+                highlightPhotoCard
+                  ? 'bg-primary-fixed/30 border-primary ring-2 ring-primary/40 shadow-md'
+                  : profile?.verification_status === 'rejected'
+                  ? 'bg-error-container/25 border-error/50'
+                  : 'bg-surface-container-low border-surface-container-high'
+              }`}
+            >
+              {highlightPhotoCard && (
+                <p className="font-label-sm text-[11px] text-primary font-extrabold">
+                  📸 Subí tu foto de perfil acá para que el Administrador te habilite a publicar en la Feria.
                 </p>
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm font-extrabold cursor-pointer active:scale-95">
-                  <span className="material-symbols-outlined text-sm">photo_camera</span>
-                  <span>{uploadingAvatar ? 'Subiendo...' : 'Cambiar Foto de Perfil'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingAvatar}
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                  />
-                </label>
+              )}
+
+              <div className="flex items-center gap-3">
+                <img
+                  src={profile?.avatar_url || DEFAULT_AVATAR_URL}
+                  alt="Mi Foto de Perfil"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-label-sm text-[10px] font-extrabold ${
+                      profile?.verification_status === 'rejected'
+                        ? 'bg-error-container text-on-error-container'
+                        : profile?.verification_status === 'pending' && hasCustomPhoto
+                        ? 'bg-amber-300/80 text-amber-950'
+                        : hasCustomPhoto
+                        ? 'bg-tertiary-container/20 text-tertiary'
+                        : 'bg-amber-300/70 text-amber-950'
+                    }`}
+                  >
+                    {isAdmin && hasCustomPhoto
+                      ? '📸 Foto activa (Admin)'
+                      : profile?.verification_status === 'rejected'
+                      ? '❌ Foto rechazada por el Admin'
+                      : profile?.verification_status === 'pending' && hasCustomPhoto
+                      ? '⏳ En revisión por el Admin'
+                      : role === 'cadete_emprendedor' &&
+                        profile?.verification_status === 'approved' &&
+                        hasCustomPhoto
+                      ? '✅ Foto aprobada para Feria'
+                      : hasCustomPhoto
+                      ? '📸 Foto propia cargada'
+                      : '🖼️ Foto por defecto'}
+                  </span>
+                  <p className="font-body-sm text-[11px] text-secondary leading-snug">
+                    {profile?.verification_status === 'rejected'
+                      ? 'Tu foto anterior fue rechazada. Subí una foto clara donde se te reconozca para volver a revisión.'
+                      : 'Necesaria para publicar en Mulitas Emprendedoras.'}
+                  </p>
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm font-extrabold cursor-pointer active:scale-95">
+                    <span className="material-symbols-outlined text-sm">photo_camera</span>
+                    <span>{uploadingAvatar ? 'Subiendo...' : 'Cambiar Foto de Perfil'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadingAvatar}
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
-
-            {!canPublishFeria && !isAdmin && (
-              <div className="p-3 rounded-xl bg-primary-fixed/30 border border-primary/25 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-label-sm text-label-sm font-extrabold text-on-surface">
-                    🛍️ Permiso Feria «Mulitas emprendedoras»
-                  </span>
-                  <span className="font-label-sm text-[10px] font-extrabold text-primary">
-                    {profile?.verification_status === 'pending' ? '⏳ En revisión' : 'Nivel 3'}
-                  </span>
-                </div>
-                <p className="font-body-sm text-[11px] text-secondary">
-                  Requiere cargar tu foto de perfil propia y la aprobación de un administrador.
-                </p>
-                {profile?.verification_status !== 'pending' && (
-                  <button
-                    type="button"
-                    disabled={!hasCustomPhoto || submitting}
-                    onClick={handleRequestFeriaPermission}
-                    className={`w-full h-10 rounded-full font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1.5 ${hasCustomPhoto
-                        ? 'bg-primary-container text-on-primary-container shadow-sm active:scale-95'
-                        : 'bg-surface-container text-secondary opacity-60 cursor-not-allowed'
-                      }`}
-                  >
-                    <span className="material-symbols-outlined text-base">storefront</span>
-                    Solicitar Aprobación para Feria (Nivel 3)
-                  </button>
-                )}
-              </div>
-            )}
 
             {/* Toggle Disponible / En Pausa (Solo Cadetes Nivel 2+) */}
             {canUseCadeteTools && (
@@ -1355,6 +1382,77 @@ export default function PerfilPage() {
           </div>
         )}
       </div>
+
+      {/* LIGHTBOX ADMIN: Ampliar Foto de Perfil para Verificar */}
+      {isAdmin && expandedPhotoUser && (
+        <div
+          onClick={() => setExpandedPhotoUser(null)}
+          className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest w-full max-w-sm rounded-2xl p-space-md shadow-2xl space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-extrabold truncate">
+                  {expandedPhotoUser.full_name || 'Usuario'}
+                </h3>
+                <p className="font-body-sm text-[11px] text-secondary truncate">
+                  {expandedPhotoUser.email}
+                  {expandedPhotoUser.whatsapp ? ` • ${expandedPhotoUser.whatsapp}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpandedPhotoUser(null)}
+                className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden bg-surface-container border border-surface-container-high">
+              <img
+                src={expandedPhotoUser.avatar_url || DEFAULT_AVATAR_URL}
+                alt={expandedPhotoUser.full_name || 'Foto de perfil'}
+                className="w-full max-h-[60vh] object-contain mx-auto"
+              />
+            </div>
+
+            {expandedPhotoUser.role !== 'admin' && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleModerateUser(
+                      expandedPhotoUser.id,
+                      {
+                        role: 'cadete_emprendedor',
+                        verification_status: 'approved',
+                        is_banned: false,
+                      },
+                      `🛍️ ${expandedPhotoUser.full_name || expandedPhotoUser.email} aprobado para Feria (N3).`
+                    )
+                  }
+                  className="h-11 rounded-xl bg-tertiary-container text-on-tertiary-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">check_circle</span>
+                  Aprobar N3 (Feria)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRejectUserPhoto(expandedPhotoUser)}
+                  className="h-11 rounded-xl bg-error-container text-on-error-container font-label-sm text-label-sm font-extrabold flex items-center justify-center gap-1 active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">close</span>
+                  Rechazar Foto
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
