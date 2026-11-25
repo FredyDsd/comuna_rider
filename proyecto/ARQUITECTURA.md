@@ -13,19 +13,25 @@
 - **Tipografía & Ergonomía en Ruta:**
   - Tipografía principal: **Plus Jakarta Sans** (altamente legible en manubrios de moto o bicicleta en movimiento).
   - Pesos: `500` (cuerpo base contra reflejos), `700` y `800` (encabezados de lectura rápida).
-  - Iconografía: **Material Symbols Outlined** (iconos limpios y universales).
+  - Iconografía: **Material Symbols Outlined**.
 
-## 2. Shell Móvil & Layout
-- Ancho contenedor: `max-w-md mx-auto` simulando pantalla nativa de smartphone en cualquier viewport.
+## 2. Shell Móvil & Layout (`src/components/Layout.jsx`)
+- Ancho contenedor principal: `max-w-md mx-auto` simulando pantalla nativa de smartphone, con vista full-screen dedicada para el mapa en `/`.
 - Altura y Safe Areas: adaptado para PWA con `pt-safe` en Header y `pb-safe` en BottomNav.
-- Interacciones táctiles de 1-tap: botones de altura mínima `44px` - `48px` para manipulación con guantes.
+- Interacciones táctiles de 1-tap: botones de altura mínima `44px` - `48px`.
+- **Botón SOS Global Arrastrable:**
+  - Circular, rojo de alta visibilidad, con la palabra `SOS` centrada.
+  - Puede arrastrarse libremente sobre la pantalla mediante pointer/touch events, con límites calculados según el viewport (`safe bounds`) para no quedar cortado por los bordes ni por `BottomNav`.
+  - Persiste su última posición en `localStorage`.
+  - Se muestra en todas las rutas **excepto en `/perfil`**.
 
 ## 3. Estructura de Enrutamiento SPA (`react-router-dom`)
-- `/` (`MapaPage`): Radar vial, clima de Jujuy, puntos de control policial / grúas y feed de incidentes en vivo.
-- `/turnos` (`TurnosPage`): Tablón comunitario de cesión y permuta de franjas horarias con selector de días.
-- `/calculadora` (`CalculadoraPage`): Cierre de caja interactivo con cálculo en tiempo real de combustible, tope de deuda ($50k) y ganancia neta.
-- `/directorio` (`DirectorioPage`): Servicios de urgencia (gomerías 24h, repuesteras en Chijra y Palpalá), líneas de cocina y feria cadete.
+- `/` (`MapaPage.jsx`): Mapa Leaflet full-screen centrado en Jujuy, clima actual, bottom sheet deslizable de 3 alturas y feed de incidentes/controles en vivo con expiración automática a las 12 horas.
+- `/turnos` (`TurnosPage.jsx`): Tablón comunitario de cesión y permuta de turnos en Supabase (`public.shifts`). Tira única de tarjetas de días desplazable horizontalmente (oculta días pasados, habilita la semana siguiente recién los miércoles), publicación exclusiva desde **Mis horarios** y teléfono precargado desde `profiles.whatsapp`.
+- `/calculadora` (`CalculadoraPage.jsx`): Cierre de caja interactivo con cálculo en tiempo real de nafta YPF, plus por clima, gastos extra, saldo neto y reporte por WhatsApp.
+- `/directorio` (`DirectorioPage.jsx`, pestaña **"Feria"** en `BottomNav.jsx`): Vista dedicada exclusivamente a la feria rider **«Mulitas emprendedoras»**. Incluye buscador/filtros por rubro, tarjetas de emprendimientos, panel rápido para que el Administrador revise/amplíe fotos pendientes y botón de publicar (redirige a `/perfil` si falta foto aprobada o avisa si está pendiente).
+- `/perfil` (`PerfilPage.jsx`): Acceso por Email/Password o Google OAuth, edición de vehículo/zona/WhatsApp, carga y estado de foto de perfil propia (`360x360` JPEG en `profiles.avatar_url`), y **Panel de Moderación (Nivel 4)** con pestañas (`Solicitudes`, `Usuarios`, `Alertas`) y modal Lightbox para ampliar fotos antes de aprobar o rechazar.
 - Componentes compartidos:
-  - `Header.jsx`: Marca PedidosYa, zona activa ("SSJ"), estado online.
-  - `BottomNav.jsx`: Barra de navegación fija inferior sin recarga de página (SPA).
-  - `Layout.jsx`: Shell centralizado con botón flotante permanente de SOS.
+  - `Header.jsx`: Marca Comuna Rider, zona activa (`SSJ`), estado y acceso directo a `/perfil`.
+  - `BottomNav.jsx`: Barra fija inferior con 4 rutas (`Mapa`, `Turnos`, `Calculadora`, `Feria`).
+  - `Layout.jsx`: Shell principal + botón SOS circular arrastrable.
